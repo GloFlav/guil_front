@@ -1,0 +1,108 @@
+name: Deploy Frontend
+
+on:
+  push:
+    branches:
+      - preprod
+
+env:
+  SSH_HOST: vps-8587531e.vps.ovh.net
+  SSH_USERNAME: debian
+  SLACK_WEBHOOK_URL: ${{ vars.SLACK_WEBHOOK_URL }} 
+  VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+  VITE_FRONTEND_URL: ${{ vars.VITE_FRONTEND_URL }}
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Clean target directory on OVH 
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ env.SSH_HOST }}
+          username: ${{ env.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            set -e
+            echo "Cleaning target directory..."
+            rm -rf /home/debian/apps/frontend/*
+            rm -rf /home/debian/apps/frontend/.*
+            mkdir -p /home/debian/apps/frontend
+            echo "Target directory cleaned."
+
+      - name: Deploy source code to server OVH
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ env.SSH_HOST }}
+          username: ${{ env.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          source: "."
+          target: /home/debian/apps/frontend/
+      
+      - name: Write environment variables to .env 
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ env.SSH_HOST }}
+          username: ${{ env.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            cd /home/debian/apps/frontend/
+            echo "VITE_API_BASE_URL=${{ env.VITE_API_BASE_URL }}"                                          > .env
+            echo "VITE_FRONTEND_URL=${{ env.VITE_FRONTEND_URL }}"                                         >> .env
+            echo "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}"   >> .env
+            echo "VITE_STRIPE_PUBLISHABLE_KEY=${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}"                 >> .env
+            echo "VITE_GOOGLE_MAPS_API_KEY=${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}"                       >> .env
+      
+
+      - name: Build and Deploy with Docker Compose (OVH)
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ env.SSH_HOST }}
+          username: ${{ env.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            set -e
+            export DOCKER_BUILDKIT=1
+            export COMPOSE_DOCKER_CLI_BUILD=1
+            cd /home/debian/apps/frontend/
+            export VITE_API_BASE_URL=${{ env.VITE_API_BASE_URL }}
+            export VITE_FRONTEND_URL=${{ env.VITE_FRONTEND_URL }}
+            export NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
+            export VITE_GOOGLE_MAPS_API_KEY=${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+            export VITE_STRIPE_PUBLISHABLE_KEY=${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
+            echo "Starting docker compose build (with cache)..."
+            docker compose build
+            echo "Bringing services up..."
+            docker compose up -d
+            echo "Deployment completed successfully."
+            docker image prune -f
+
+      - name: Notify Slack on Success
+        if: success()
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ env.SLACK_WEBHOOK_URL }}
+          SLACK_MESSAGE: "✅ *FRONTEND PREPROD*\n${{ github.event.head_commit.message }}"
+          SLACK_COLOR: 'good'
+      
+      - name: Notify Slack on Failure
+        if: failure()
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ env.SLACK_WEBHOOK_URL }}
+          SLACK_MESSAGE: |
+            ❌ *FRONTEND PREPROD*
+            ${{ github.event.head_commit.message }}
+            Deployment failed. See run logs:
+            https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SLACK_COLOR: 'danger'

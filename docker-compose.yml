@@ -1,0 +1,22 @@
+version: '3.8'
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # These arguments will be populated from environment variables
+        # on the machine running `docker compose build`.
+        - VITE_API_BASE_URL
+        - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+        - VITE_STRIPE_PUBLISHABLE_KEY
+        - VITE_GOOGLE_MAPS_API_KEY
+    ports:
+      - "8080:80"
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+

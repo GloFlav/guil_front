@@ -1,0 +1,82 @@
+{
+  "ignorePatterns": [
+    "node_modules",
+    "dist",
+    "coverage"
+  ],
+  "ignoreUnresolved": [
+    [
+      "@/assets/O_parfait.svg?react",
+      [
+        "src\\components\\ui\\Loader.jsx",
+        "src\\pages\\praticien\\ProfileComponents\\CompleteProfile.jsx",
+        "src\\components\\common\\onboarding\\CompleteProfileOnboarding.jsx"
+      ]
+    ]
+  ],
+  "ignoreUnused": [
+    "@grammarly/editor-sdk-react",
+    "@heroui/date-input",
+    "@mui/x-date-pickers",
+    "@radix-ui/react-toast",
+    "@react-native-community/datetimepicker",
+    "@tailwindcss/vite",
+    "@tinymce/tinymce-react",
+    "@types/react-big-calendar",
+    "medicalreact",
+    "multer",
+    "react-big-calendar",
+    "react-calendar",
+    "react-date-picker",
+    "react-datepicker",
+    "react-dnd",
+    "react-dnd-html5-backend",
+    "react-easy-crop",
+    "react-input-mask",
+    "react-joyride",
+    "react-time-picker",
+    "react-toastify",
+    "react-typing-effect",
+    "rsuite",
+    "styled-components",
+    "tailwindcss-animate",
+    "timezone",
+    "vaul"
+  ],
+  "ignoreUnimported": [
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\components\\common\\messages\\MessageListPatient.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\components\\common\\onboarding\\index.js",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\hooks\\use-messages.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\pages\\patients\\MessagePatient.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\pages\\praticien\\ProfileComponents\\AddTarif.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\pages\\praticien\\ProfileComponents\\AgendaForm.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\pages\\praticien\\ProfileComponents\\Avis.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\pages\\praticien\\componentAgenda\\AppointmentModal.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\pages\\praticien\\componentAgenda\\AppointmentSlotDraggable.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\pages\\praticien\\componentAgenda\\AppointmentedSlot.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\pages\\praticien\\componentAgenda\\ConfirmationModal.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\pages\\praticien\\componentAgenda\\DayTimeLine.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\pages\\praticien\\componentAgenda\\Modal.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\pages\\praticien\\componentAgenda\\MultiSelectCabinet.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\pages\\praticien\\componentAgenda\\OverrideFormForConfig.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\pages\\praticien\\componentAgenda\\RenderedAppointmented.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\pages\\praticien\\componentAgenda\\RenderedAppointments.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\pages\\praticien\\componentAgenda\\RenderedAppointmentsDay.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\pages\\praticien\\componentAgenda\\TimeLineDay.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\pages\\praticien\\componentAgenda\\TimeSlotCell.jsx",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\pages\\praticien\\hooks\\useAppointmentsMapping.js",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\services\\__tests__\\appointement-services.test.js",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\services\\__tests__\\appointement-simple.test.js",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\services\\__tests__\\payment-simple.test.js",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\services\\__tests__\\paymentService.test.js",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\services\\formations-service.js",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\services\\override-service.js",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\services\\practitioner-speciality-service.js",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\test\\setup.js",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\test\\simple.test.js",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\utils\\__tests__\\stripe-simple.test.js",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\utils\\__tests__\\stripe.test.js",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\utils\\__tests__\\timezone-simple.test.js",
+    "D:\\Kandra Alaxion\\hellosoins-frontend\\src\\utils\\__tests__\\timezone.test.js"
+  ]
+}

@@ -1,0 +1,635 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Consolidated and fixed base variables and global styles */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+
+    --radius: 0.5rem;
+
+    /* Sidebar design tokens */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Réduction de l'affichage à 80% */
+/* html {
+  zoom: 80%;
+  -moz-transform: scale(0.8);
+  -moz-transform-origin: 0 0;
+} */
+
+/* Masquer la barre de scroll pour WebKit (Chrome, Safari) */
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+/* Masquer la barre de scroll pour Firefox */
+.scrollbar-hidden {
+  scrollbar-width: none;
+}
+
+.scrollbar-custom {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent; /* Masque la scrollbar par défaut */
+}
+
+/* Webkit : cacher la barre par défaut */
+.scrollbar-custom::-webkit-scrollbar-thumb {
+  background-color: transparent;
+}
+
+/* Webkit : afficher la barre au survol */
+.scrollbar-custom:hover {
+  scrollbar-color: #11293a #f1f1f1;
+}
+
+.scrollbar-custom:hover::-webkit-scrollbar-thumb {
+  background-color: #3498db;
+}
+
+.leaflet-container {
+  z-index: 0 !important;
+}
+
+/* Supprimer les flèches sur Chrome, Safari, Edge, Opera */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Supprimer les flèches sur Firefox */
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+@font-face {
+  font-family: 'Poppins';
+  src: url('/src/assets/fonts/poppins/Poppins-Regular.ttf');
+  font-weight: normal;
+  font-style: normal;
+}
+
+body, * {
+  font-family: 'Poppins' !important;
+}
+
+.digit-slide span,
+.clock-colon {
+  font-family: 'Courier New', Courier, 'Roboto Mono', 'Space Mono', monospace !important;
+}
+
+.clock-wrapper {
+  font-family: 'Courier New', Courier, monospace;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f3f5f7;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-family: 'Segoe UI', sans-serif;
+  width: fit-content;
+  min-width: 100px;
+  border-bottom: 4px solid #5DA781;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.clock-sm-fixed {
+  --digit-size: 10px;
+  --digit-height: 1.1rem;
+  --font-size: 1.1rem;
+}
+
+.clock-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-right: 0.8rem; /* ↓ Légèrement réduit */
+}
+
+.clock-day {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #2e3d49;
+}
+
+.clock-city {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #adb5bd;
+}
+
+.clock-time {
+  font-family: 'Courier New', Courier, monospace;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.digit-container {
+  width: var(--digit-size);
+  overflow: visible;
+  position: relative;
+}
+
+.digit-slide span {
+  display: block;
+  font-size: var(--font-size);
+  font-weight: 600;
+  color: #2e3d49;
+}
+
+.clock-colon {
+  font-size: var(--font-size);
+  font-weight: 400;
+  color: #2e3d49;
+}
+
+.clock-time-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.01rem;
+}
+
+.clock-date {
+  font-size: 0.75rem;
+  font-weight: 100;
+  color: #adb5bd;
+  margin-top: 0;
+  line-height: 0.75;
+}
+
+.clock-city-label {
+  margin-right: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #6c757d;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@layer utilities {
+  /* wrapper : 1 tour / seconde */
+  .custom-spinner-slow {
+    animation: spin 1s linear infinite;
+    transform-origin: center;
+  }
+  /* SVG    : 4 tours / seconde (0.25 s par tour) */
+  .custom-spinner-fast {
+    animation: spin 0.25s linear infinite;
+    transform-origin: center;
+  }
+}
+
+.article-content {
+  color: #374151;
+  line-height: 1.7;
+  font-size: 16px;
+}
+
+/* Styles pour tous les titres */
+.article-content h1,
+.article-content h2,
+.article-content h3,
+.article-content h4,
+.article-content h5,
+.article-content h6 {
+  color: #1f2937;
+  font-weight: 700;
+  margin-top: 2em;
+  margin-bottom: 1em;
+  line-height: 1.3;
+}
+
+.article-content h1 {
+  font-size: 2.25em;
+  color: #111827;
+  border-bottom: 3px solid #2b7a72;
+  padding-bottom: 0.5em;
+}
+
+.article-content h2 {
+  font-size: 1.875em;
+  color: #1f2937;
+  border-bottom: 2px solid #e5e7eb;
+  padding-bottom: 0.3em;
+}
+
+.article-content h3 {
+  font-size: 1.5em;
+  color: #374151;
+}
+
+.article-content h4 {
+  font-size: 1.25em;
+  color: #4b5563;
+}
+
+.article-content h5 {
+  font-size: 1.125em;
+  color: #6b7280;
+}
+
+.article-content h6 {
+  font-size: 1em;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+/* Paragraphes */
+.article-content p {
+  margin-bottom: 1.5em;
+  text-align: justify;
+  line-height: 1.7;
+}
+
+/* Texte en gras et italique */
+.article-content strong,
+.article-content b {
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.article-content em,
+.article-content i {
+  font-style: italic;
+}
+
+.article-content u {
+  text-decoration: underline;
+  text-decoration-color: #2b7a72;
+}
+
+.article-content strike {
+  text-decoration: line-through;
+  color: #9ca3af;
+}
+
+/* Liens */
+.article-content a {
+  color: #2b7a72;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.article-content a:hover {
+  color: #1e5e56;
+  border-bottom-color: #2b7a72;
+}
+
+/* Listes */
+.article-content ul,
+.article-content ol {
+  margin: 1.5em 0;
+  padding-left: 2em;
+}
+
+.article-content li {
+  margin-bottom: 0.5em;
+  line-height: 1.6;
+}
+
+.article-content ul li {
+  list-style-type: disc;
+}
+
+.article-content ol li {
+  list-style-type: decimal;
+}
+
+.article-content ul ul li {
+  list-style-type: circle;
+}
+
+.article-content ol ol li {
+  list-style-type: lower-alpha;
+}
+
+/* Citations */
+.article-content blockquote {
+  margin: 2em 0;
+  padding: 1.5em 2em;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-left: 4px solid #2b7a72;
+  font-style: italic;
+  color: #475569;
+  border-radius: 0 8px 8px 0;
+  position: relative;
+}
+
+.article-content blockquote:before {
+  content: '"';
+  font-size: 3em;
+  color: #2b7a72;
+  position: absolute;
+  top: 0.2em;
+  left: 0.3em;
+  opacity: 0.3;
+}
+
+/* Images */
+.article-content img {
+  max-width: 100%;
+  height: auto;
+  margin: 2em auto;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  display: block;
+}
+
+.article-content figure {
+  margin: 2em 0;
+  text-align: center;
+}
+
+.article-content figcaption {
+  margin-top: 0.5em;
+  font-size: 0.9em;
+  color: #6b7280;
+  font-style: italic;
+}
+
+/* Tableaux */
+.article-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 2em 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.article-content th,
+.article-content td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.article-content th {
+  background: linear-gradient(135deg, #2b7a72 0%, #1e5e56 100%);
+  color: white;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.85em;
+  letter-spacing: 0.05em;
+}
+
+.article-content tr:nth-child(even) {
+  background-color: #f9fafb;
+}
+
+.article-content tr:hover {
+  background-color: #f3f4f6;
+}
+
+/* Code */
+.article-content code {
+  background-color: #f3f4f6;
+  color: #dc2626;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.9em;
+  border: 1px solid #e5e7eb;
+}
+
+.article-content pre {
+  background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+  color: #f9fafb;
+  padding: 1.5em;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 2em 0;
+  border: 1px solid #374151;
+}
+
+.article-content pre code {
+  background: none;
+  color: inherit;
+  padding: 0;
+  border: none;
+  font-size: 0.9em;
+}
+
+/* Séparateurs */
+.article-content hr {
+  margin: 3em 0;
+  border: none;
+  height: 2px;
+  background: linear-gradient(to right, transparent, #2b7a72, transparent);
+  border-radius: 1px;
+}
+
+/* Éléments spéciaux */
+.article-content mark {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde047 100%);
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.article-content small {
+  font-size: 0.875em;
+  color: #6b7280;
+}
+
+.article-content sub,
+.article-content sup {
+  font-size: 0.75em;
+  line-height: 0;
+  position: relative;
+  vertical-align: baseline;
+}
+
+.article-content sup {
+  top: -0.5em;
+}
+
+.article-content sub {
+  bottom: -0.25em;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .article-content {
+    font-size: 16px;
+  }
+
+  .article-content h1 { font-size: 1.875em; }
+  .article-content h2 { font-size: 1.5em; }
+  .article-content h3 { font-size: 1.25em; }
+
+  .article-content table {
+    font-size: 0.9em;
+  }
+
+  .article-content th,
+  .article-content td {
+    padding: 8px 12px;
+  }
+}
+
+.tab-container {
+  width: 100%;
+  max-width: 800px;
+  margin: 20px auto;
+  font-family: Arial, sans-serif;
+}
+
+/* Tabs Container */
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+/* Tab Button */
+.tab-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  background-color: #f0f0f0; /* Inactive tab background */
+  color: #333;
+  font-size: 16px;
+  position: relative;
+}
+
+/* Active Tab */
+.tab-button.active {
+  background-color: #009578; /* Active tab background */
+  color: white;
+  font-weight: bold;
+}
+
+/* Active Tab Highlight */
+.tab-button.active::after {
+  content: '';
+  position: absolute;
+  bottom: -4px; /* Adjust as needed */
+  left: 0;
+  right: 0;
+  height: 4px;
+  background-color: #005e50; /* Blue highlight */
+  border-radius: 4px;
+}
+
+/* Icon Style */
+.icon {
+  margin-right: 5px;
+  font-size: 18px;
+  vertical-align: middle;
+}
+
+/* Tab Content */
+.tab-content {
+  padding: 20px;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
