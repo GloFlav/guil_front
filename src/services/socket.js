@@ -1,6 +1,5 @@
 /**
  * Service de gestion WebSocket pour Survey Generator
- * Connexion native WebSocket avec le backend FastAPI
  */
 
 let ws = null;
@@ -11,46 +10,21 @@ let reconnectTimeout = null;
 let listeners = {};
 
 function getWebSocketUrl() {
-  // Priorité: VITE_SOCKET_URL > VITE_API_BASE_URL > localhost
-  let baseUrl = import.meta.env.VITE_SOCKET_URL;
-  
-  if (!baseUrl) {
-    baseUrl = import.meta.env.VITE_API_BASE_URL;
-  }
-  
-  if (!baseUrl) {
-    console.warn('WebSocket URL non configurée, utilisation de localhost:8000');
-    return 'ws://localhost:8000/ws';
-  }
-
-  // Convertir http/https en ws/wss
-  let wsUrl = baseUrl
-    .replace(/^https:\/\//, 'wss://')
-    .replace(/^http:\/\//, 'ws://')
-    .replace(/\/$/, ''); // Enlever trailing slash si présent
-
-  // Ajouter /ws si absent
-  if (!wsUrl.endsWith('/ws')) {
-    wsUrl = wsUrl + '/ws';
-  }
-
-  console.log('🔗 WebSocket URL:', wsUrl);
+  let baseUrl = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_BASE_URL || 'ws://localhost:8000';
+  let wsUrl = baseUrl.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://').replace(/\/$/, '');
+  if (!wsUrl.endsWith('/ws')) wsUrl = wsUrl + '/ws';
   return wsUrl;
 }
 
 export function connectSocket() {
   return new Promise((resolve, reject) => {
     if (ws && ws.readyState === WebSocket.OPEN) {
-      console.log('✅ WebSocket déjà connecté');
       resolve(ws);
       return;
     }
 
     try {
-      const url = getWebSocketUrl();
-      console.log('🔗 Connexion WebSocket à:', url);
-
-      ws = new WebSocket(url);
+      ws = new WebSocket(getWebSocketUrl());
 
       ws.onopen = () => {
         console.log('✅ WebSocket connecté');
@@ -64,22 +38,13 @@ export function connectSocket() {
           const message = JSON.parse(event.data);
           handleMessage(message);
         } catch (error) {
-          console.error('Erreur parsing message WebSocket:', error);
-          emit('error', {
-            type: 'parse_error',
-            message: 'Erreur lors du parsing du message',
-            error: error.message,
-          });
+          console.error('Erreur parsing:', error);
         }
       };
 
       ws.onerror = (error) => {
         console.error('❌ Erreur WebSocket:', error);
-        emit('error', {
-          type: 'websocket_error',
-          message: 'Erreur de connexion WebSocket',
-          error: error,
-        });
+        emit('error', { type: 'websocket_error', message: 'Erreur connexion', error });
         reject(error);
       };
 
@@ -89,7 +54,6 @@ export function connectSocket() {
         attemptReconnect();
       };
     } catch (error) {
-      console.error('Erreur création WebSocket:', error);
       reject(error);
     }
   });
@@ -97,24 +61,11 @@ export function connectSocket() {
 
 function attemptReconnect() {
   if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-    console.error('❌ Nombre max de tentatives de reconnexion atteint');
-    emit('reconnect_failed', {
-      attempts: reconnectAttempts,
-      maxAttempts: MAX_RECONNECT_ATTEMPTS,
-    });
+    emit('reconnect_failed', {});
     return;
   }
-
   reconnectAttempts++;
-  console.log(
-    `🔄 Tentative de reconnexion ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} dans ${RECONNECT_DELAY}ms`
-  );
-
-  reconnectTimeout = setTimeout(() => {
-    connectSocket().catch((error) => {
-      console.error('Erreur lors de la reconnexion:', error);
-    });
-  }, RECONNECT_DELAY);
+  reconnectTimeout = setTimeout(() => connectSocket().catch(e => {}), RECONNECT_DELAY);
 }
 
 export function sendMessage(message) {
@@ -123,127 +74,73 @@ export function sendMessage(message) {
       reject(new Error('WebSocket non connecté'));
       return;
     }
-
-    try {
-      ws.send(JSON.stringify(message));
-      console.log('📤 Message envoyé:', message.type);
-      resolve();
-    } catch (error) {
-      console.error('Erreur envoi message:', error);
-      reject(error);
-    }
+    ws.send(JSON.stringify(message));
+    resolve();
   });
 }
 
 function handleMessage(message) {
-  const { type, status, message: msg, percentage, data, error } = message;
+  const { type, status, message: msg, percentage, data, error, level } = message;
 
-  console.log(`📥 Message reçu [${type}/${status}]:`, message);
-
-  // Émettre différents événements selon le type
   if (type === 'progress') {
-    emit('progress', {
-      status,
-      message: msg,
-      percentage,
-      data,
-    });
+    emit('progress', { status, message: msg, percentage, data });
   } else if (type === 'error') {
-    emit('error', {
-      type: error || 'unknown_error',
-      message: msg,
-    });
+    emit('error', { type: error, message: msg });
   } else if (type === 'result') {
     emit('result', data);
+  } else if (type === 'log') {
+    emit('log', {
+      level: level,
+      text: msg,
+      timestamp: message.timestamp
+    });
   }
-
-  // Émettre le message générique
-  emit('message', message);
 }
 
 export function on(event, callback) {
-  if (!listeners[event]) {
-    listeners[event] = [];
-  }
+  if (!listeners[event]) listeners[event] = [];
   listeners[event].push(callback);
-
-  // Retourner fonction de désabonnement
   return () => {
-    if (listeners[event]) {
-      listeners[event] = listeners[event].filter((cb) => cb !== callback);
-    }
+    listeners[event] = listeners[event].filter((cb) => cb !== callback);
   };
 }
 
 export function off(event, callback) {
-  if (listeners[event]) {
-    listeners[event] = listeners[event].filter((cb) => cb !== callback);
-  }
+  if (listeners[event]) listeners[event] = listeners[event].filter((cb) => cb !== callback);
 }
 
 function emit(event, data) {
   if (listeners[event]) {
-    listeners[event].forEach((callback) => {
-      try {
-        callback(data);
-      } catch (error) {
-        console.error(`Erreur listener ${event}:`, error);
-      }
-    });
+    listeners[event].forEach((callback) => callback(data));
   }
 }
 
 export function disconnectSocket() {
-  console.log('🔌 Déconnexion WebSocket');
-
-  if (reconnectTimeout) {
-    clearTimeout(reconnectTimeout);
-    reconnectTimeout = null;
-  }
-
+  if (reconnectTimeout) clearTimeout(reconnectTimeout);
   if (ws) {
     ws.close();
     ws = null;
   }
-
   listeners = {};
 }
 
-export function getSocketStatus() {
-  if (!ws) return 'disconnected';
-  
-  switch (ws.readyState) {
-    case WebSocket.CONNECTING:
-      return 'connecting';
-    case WebSocket.OPEN:
-      return 'connected';
-    case WebSocket.CLOSING:
-      return 'closing';
-    case WebSocket.CLOSED:
-      return 'disconnected';
-    default:
-      return 'unknown';
-  }
+// --- FONCTIONS MANQUANTES AJOUTÉES ICI ---
+
+export function getSocket() {
+  return ws;
 }
 
 export function isSocketConnected() {
   return ws && ws.readyState === WebSocket.OPEN;
 }
 
-/**
- * Retourne l'instance WebSocket actuelle
- */
-export function getSocket() {
-  return ws;
-}
-
-export default {
-  connectSocket,
-  sendMessage,
-  disconnectSocket,
-  on,
-  off,
-  isSocketConnected,
-  getSocketStatus,
-  getSocket,
+// Export par défaut mis à jour
+export default { 
+  connectSocket, 
+  sendMessage, 
+  disconnectSocket, 
+  on, 
+  off, 
+  getSocket,       // <--- AJOUT CRUCIAL
+  isSocketConnected // <--- AJOUT CRUCIAL
 };
