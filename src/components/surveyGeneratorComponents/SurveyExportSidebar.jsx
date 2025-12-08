@@ -5,12 +5,12 @@ import {
   FileText,
   Share2,
   Globe,
-  CheckCircle,
   Loader,
   Info,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import withReactContent from 'sweetalert2-react-content';
+import { surveyExportService } from '@/services/SurveyExportService'; // Import du service
 
 const MySwal = withReactContent(Swal);
 
@@ -18,20 +18,114 @@ const SurveyExportSidebar = ({ data }) => {
   const [exporting, setExporting] = useState(null);
   const GREEN_COLOR = '#5DA781';
 
-  const handleExport = async (format) => {
+  // --- LOGIQUE DE TÉLÉCHARGEMENT FICHIER (Excel, CSV, Kobo) ---
+  const handleDownloadFile = async (formatName, serviceMethod) => {
+    try {
+      // 1. Appel au backend pour générer le fichier
+      const result = await surveyExportService[serviceMethod](data);
+
+      if (result.success && result.filename) {
+        // 2. Déclenchement du téléchargement
+        await surveyExportService.downloadFile(result.filename);
+
+        MySwal.fire({
+          icon: 'success',
+          title: 'Téléchargement lancé',
+          text: `Votre fichier ${formatName} a été généré avec succès.`,
+          timer: 3000,
+          showConfirmButton: false,
+        });
+      }
+    } catch (error) {
+      console.error(error);
+      MySwal.fire({
+        icon: 'error',
+        title: 'Erreur',
+        text: `Impossible de générer le fichier ${formatName}. Vérifiez que le serveur est accessible.`,
+      });
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  // --- LOGIQUE SPÉCIALE GOOGLE FORMS ---
+  const handleGoogleFormCreation = async () => {
+    try {
+      // Notification d'attente
+      MySwal.fire({
+        title: 'Communication avec Google...',
+        text: 'Création du formulaire en cours. Cela peut prendre quelques secondes.',
+        didOpen: () => {
+          MySwal.showLoading();
+        },
+        allowOutsideClick: false,
+      });
+
+      // Appel au service
+      const result = await surveyExportService.createGoogleForm(data);
+
+      if (result.success) {
+        const { responderUri, editUri } = result;
+
+        // Affichage des liens
+        MySwal.fire({
+          icon: 'success',
+          title: 'Formulaire Google Créé !',
+          html: `
+            <div class="flex flex-col gap-3 mt-4 text-left">
+              <p class="text-sm text-gray-600 mb-2">Votre formulaire est prêt dans le Cloud.</p>
+              
+              <a href="${responderUri}" target="_blank" class="flex items-center justify-center gap-2 w-full p-3 bg-green-600 text-white rounded hover:bg-green-700 transition no-underline">
+                <span>📝 Répondre au formulaire</span>
+              </a>
+
+              <a href="${editUri}" target="_blank" class="flex items-center justify-center gap-2 w-full p-3 bg-blue-600 text-white rounded hover:bg-blue-700 transition no-underline">
+                <span>⚙️ Modifier (Admin)</span>
+              </a>
+            </div>
+          `,
+          showConfirmButton: false,
+          showCloseButton: true,
+          width: '400px'
+        });
+      }
+    } catch (error) {
+      console.error(error);
+      MySwal.fire({
+        icon: 'error',
+        title: 'Erreur Google API',
+        text: "Impossible de créer le formulaire. Vérifiez les logs du serveur (authentification requise ?).",
+      });
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  // --- DISPATCHER ---
+  const handleExport = (format) => {
     setExporting(format);
 
-    // Simuler l'export
-    setTimeout(() => {
-      MySwal.fire({
-        icon: 'success',
-        title: 'Export réussi',
-        text: `Votre questionnaire a été exporté au format ${format}.`,
-        timer: 2000,
-        showConfirmButton: false,
-      });
-      setExporting(null);
-    }, 1500);
+    switch (format) {
+      case 'excel':
+        handleDownloadFile('Excel', 'generateExcel');
+        break;
+      case 'csv':
+        handleDownloadFile('CSV', 'generateCsv');
+        break;
+      case 'kobotools':
+        handleDownloadFile('KoboToolbox', 'generateKobo');
+        break;
+      case 'google-forms':
+        handleGoogleFormCreation();
+        break;
+      case 'google-sheets':
+        // On utilise le générateur Excel mais on indique que c'est pour Sheets
+        handleDownloadFile('Compatible Google Sheets', 'generateExcel');
+        break;
+      default:
+        setExporting(null);
+        break;
+    }
   };
 
   const exportOptions = [
@@ -65,7 +159,7 @@ const SurveyExportSidebar = ({ data }) => {
       icon: Share2,
       description: 'Créer un Google Form',
       color: '#8b5cf6',
-      hint: 'Formulaire en ligne',
+      hint: 'Formulaire en ligne (API)',
     },
     {
       id: 'kobotools',
@@ -73,7 +167,7 @@ const SurveyExportSidebar = ({ data }) => {
       icon: FileSpreadsheet,
       description: 'Format KoboToolbox',
       color: '#ec4899',
-      hint: 'Pour les enquêtes',
+      hint: 'Standard XLSForm',
     },
   ];
 
@@ -194,7 +288,7 @@ const SurveyExportSidebar = ({ data }) => {
           <div>
             <p className="text-xs font-medium text-blue-900">Formats disponibles</p>
             <p className="text-xs text-blue-800 leading-relaxed mt-1">
-              Choisissez le format qui correspond à votre besoin: Excel pour l'analyse, Google Forms pour la collecte en ligne, ou KoboToolbox pour les enquêtes terrain.
+              Les fichiers sont générés par le serveur. Google Forms nécessite une autorisation Google la première fois.
             </p>
           </div>
         </div>
