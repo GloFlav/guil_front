@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
-import { Info } from 'lucide-react';
+import { Info, Sparkles } from 'lucide-react'; // 1. Import de Sparkles (Etoiles IA)
 
-const DataDescriptionSection = ({ description, onDescriptionChange }) => {
+const DataDescriptionSection = ({ description, onDescriptionChange, onAiGenerate }) => { // Ajout prop onAiGenerate optionnelle
   const textareaRef = useRef(null);
   const GREEN_COLOR = '#5DA781';
 
@@ -40,20 +40,34 @@ const DataDescriptionSection = ({ description, onDescriptionChange }) => {
         </p>
       </div>
 
-      {/* Textarea */}
+      {/* Textarea Wrapper */}
       <div className="space-y-2">
-        <textarea
-          ref={textareaRef}
-          value={description}
-          onChange={(e) => onDescriptionChange(e.target.value)}
-          placeholder="Ex: Analysez les tendances d'âge par région, identifiez les patterns manquants dans les données de contact, calculez les statistiques descriptives pour chaque colonne numérique..."
-          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-0 text-sm resize-none max-h-80 transition-colors"
-          style={{
-            focusRingColor: GREEN_COLOR,
-          }}
-          rows={3}
-          onInput={autoResize}
-        />
+        {/* 2. Div relative pour contenir le bouton */}
+        <div className="relative">
+          <textarea
+            ref={textareaRef}
+            value={description}
+            onChange={(e) => onDescriptionChange(e.target.value)}
+            placeholder="Ex: Analysez les tendances d'âge par région, identifiez les patterns manquants..."
+            // 3. Ajout de pr-12 (padding-right) pour laisser la place au bouton
+            className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-0 text-sm resize-none max-h-80 transition-colors"
+            style={{
+              '--tw-ring-color': GREEN_COLOR, // Astuce pour utiliser la couleur dynamique avec Tailwind ring
+            }}
+            rows={3}
+            onInput={autoResize}
+          />
+          
+          {/* 4. Le Bouton IA (Etoile) */}
+          <button
+            onClick={onAiGenerate}
+            className="absolute right-3 bottom-3 p-1.5 rounded-md text-white shadow-sm transition-transform hover:scale-105 active:scale-95 flex items-center justify-center"
+            style={{ backgroundColor: GREEN_COLOR }}
+            title="Améliorer avec l'IA"
+          >
+            <Sparkles className="w-4 h-4" />
+          </button>
+        </div>
 
         {/* Character Count */}
         <div className="flex justify-between items-center">

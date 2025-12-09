@@ -18,33 +18,26 @@ import * as socketService from '@/services/socket';
 
 const MySwal = withReactContent(Swal);
 
-// --- BANQUE DE PHRASES (ÉNUMÉRATION + LOGS + PATIENTER) ---
+// --- BANQUE DE PHRASES TTS (Conservée) ---
 const PHRASES = {
-  // 1. ACCROCHE (Rapide)
   START: [
     "C'est reçu ! Je m'occupe de tout. Lancement de la procédure.",
     "Message bien reçu. J'active les protocoles. Installez-vous.",
     "Entendu. Je prends le relais pour structurer votre demande. C'est parti.",
     "C'est noté. Je démarre l'orchestrateur. Initialisation en cours."
   ],
-  
-  // 2. LE PLAN DÉTAILLÉ (Énumération 1, 2, 3 + Lire les logs)
   PLAN: [
     "Voici le déroulé des opérations. Premièrement : j'analyse la structure de votre demande. Deuxièmement : je génère le contenu en alternant les modèles LLM pour préserver les tokens. Troisièmement : je calcule les coordonnées géographiques adéquates. Pour suivre les détails techniques, regardez les logs qui s'affichent à l'écran. Veuillez patienter.",
     "Je lance la séquence en trois phases. Phase 1 : Fragmentation de la demande. Phase 2 : Rédaction multi-agents pour éviter la saturation mémoire. Phase 3 : Recherche des points GPS sur la carte. Je vous invite à lire le terminal pour voir l'avancement précis. Merci de patienter quelques instants.",
     "Opération lancée. D'abord, j'extrais les concepts clés. Ensuite, je rote les modèles d'intelligence artificielle pour contourner la limite de tokens. Enfin, je définirai les lieux d'enquête géographiques. Les détails techniques défilent dans les logs, n'hésitez pas à les consulter. Je m'occupe de tout.",
     "Plan d'exécution activé. Un : Découpage du prompt. Deux : Génération sécurisée par blocs pour garantir l'intégrité des tokens. Trois : Identification des coordonnées géographiques pertinentes. Vous pouvez suivre chaque étape technique via les logs affichés. La procédure est en cours, veuillez patienter."
   ],
-
-  // 3. LOGIQUE GÉO (Si détectée plus tard)
   GEO_TRIGGER: [
     "J'ai les données ! Je suis actuellement en train de placer les coordonnées GPS exactes sur la carte.",
     "Focus géographique : je finalise la triangulation des points d'enquête sur la zone.",
     "La couche cartographique est prête. J'injecte les localités détectées dans le rapport.",
     "Analyse spatiale terminée. Je verrouille les positions des lieux à visiter."
   ],
-
-  // 4. SUCCÈS
   SUCCESS_OUTRO: [
     "Génération terminée avec succès ! Tout est là : structure, questions et carte. Vous pouvez télécharger le résultat en Excel, C S V, ou pour Kobo Tools dès maintenant.",
     "Mission accomplie. Le système a tout généré. Les exports Excel, Google Forms et Kobo sont prêts dans le menu de droite.",
@@ -59,11 +52,12 @@ const getRandomPhrase = (category) => {
 };
 
 const SurveyGenerator = () => {
+  // --- STATE ---
   const [messages, setMessages] = useState([
     {
       id: 1,
       role: 'assistant',
-      text: 'Bonjour! Je suis Kaï-hwïnd. Décrivez votre enquête, je vous expliquerai ma stratégie technique à voix haute.',
+      text: 'Bonjour! Je suis Kaï-hwïnd. Décrivez votre enquête, je vais orchestrer la génération via nos modèles multi-LLM en parallèle.',
       timestamp: new Date(),
     },
   ]);
@@ -81,7 +75,6 @@ const SurveyGenerator = () => {
   const [isTtsEnabled, setIsTtsEnabled] = useState(true);
   const isTtsEnabledRef = useRef(true); 
   
-  // Refs de gestion narrative
   const lastLogTimeRef = useRef(0);
   const hasSpokenGeoRef = useRef(false);
 
@@ -93,6 +86,7 @@ const SurveyGenerator = () => {
 
   const GREEN_COLOR = '#5DA781';
 
+  // --- SYNC TTS REF ---
   useEffect(() => {
     isTtsEnabledRef.current = isTtsEnabled;
     if (!isTtsEnabled) window.speechSynthesis.cancel();
@@ -102,7 +96,6 @@ const SurveyGenerator = () => {
   const speakText = (text, priority = 'NORMAL') => {
     if (!isTtsEnabledRef.current || !('speechSynthesis' in window)) return;
 
-    // CRITICAL: Coupe tout (Début / Erreur / Fin / Géo Trigger)
     if (priority === 'CRITICAL') {
       window.speechSynthesis.cancel();
     }
@@ -129,7 +122,7 @@ const SurveyGenerator = () => {
     return () => window.speechSynthesis.cancel();
   }, []);
 
-  // --- WEBSOCKET ---
+  // --- WEBSOCKET CONNECTION & LISTENERS ---
   useEffect(() => {
     const initializeSocket = async () => {
       try {
@@ -168,14 +161,13 @@ const SurveyGenerator = () => {
         },
       ]);
 
+      // Logique TTS pour les logs
       if (isTtsEnabledRef.current) {
         const lowerText = logData.text.toLowerCase();
         const now = Date.now();
 
-        // Si on est encore dans la période du long résumé technique (les 17 premières secondes), on ignore les logs
         if (now < lastLogTimeRef.current) return;
 
-        // A. DÉTECTION GÉOGRAPHIQUE (Prioritaire)
         if ((lowerText.includes('location') || lowerText.includes('gps') || lowerText.includes('coordin')) && !hasSpokenGeoRef.current) {
             hasSpokenGeoRef.current = true;
             speakText(getRandomPhrase('GEO_TRIGGER'), 'CRITICAL'); 
@@ -183,7 +175,6 @@ const SurveyGenerator = () => {
             return;
         }
 
-        // B. LOGS CLASSIQUES (Nettoyage / Validation)
         if (!window.speechSynthesis.speaking && (now - lastLogTimeRef.current > 3000)) {
              if (lowerText.includes('cleaning')) {
                  speakText("Nettoyage et structuration des données.", 'NORMAL');
@@ -193,8 +184,40 @@ const SurveyGenerator = () => {
       }
     });
 
+    // --- GESTION DU STREAMING PARALLÈLE (Le cœur de la modif) ---
+    // On écoute l'événement générique 'message' pour capter les types custom du backend
+    const unsubMessage = socketService.on('message', (msg) => {
+        if (!msg || !msg.type) return;
+
+        // 1. Initialisation de la structure (Métadonnées)
+        if (msg.type === 'init_structure') {
+            setSurveyData(msg.data); // Affiche le squelette immédiatement
+        }
+        // 2. Mise à jour des lieux
+        else if (msg.type === 'update_locations') {
+            setSurveyData(prev => {
+                if(!prev) return { locations: msg.data };
+                return { ...prev, locations: msg.data };
+            });
+        }
+        // 3. Ajout progressif des catégories (Dès qu'un LLM a fini)
+        else if (msg.type === 'append_categories') {
+            setSurveyData(prev => {
+                const currentCats = prev?.categories || [];
+                // Fusion des nouvelles catégories
+                const newCats = [...currentCats, ...msg.data];
+                
+                // Petit tri optionnel pour garder l'ordre logique si l'ID le permet, sinon on empile
+                // newCats.sort((a, b) => (a.order || 0) - (b.order || 0));
+
+                return { ...prev, categories: newCats };
+            });
+        }
+    });
+
     // --- RÉSULTAT FINAL ---
     const unsubResult = socketService.on('result', (data) => {
+      // On s'assure que tout est bien synchro à la fin
       setSurveyData(data);
       setIsLoading(false);
       setProgress(null);
@@ -202,7 +225,6 @@ const SurveyGenerator = () => {
       const nbCategories = data.categories?.length || 0;
       const nbLocations = data.locations?.length || 0;
       
-      // Message de fin
       const outro = getRandomPhrase('SUCCESS_OUTRO');
       const stats = ` J'ai généré ${nbCategories} catégories et ${nbLocations} lieux.`;
       
@@ -227,7 +249,16 @@ const SurveyGenerator = () => {
       speakText("Alerte critique. Le processus a rencontré une erreur fatale.", 'CRITICAL');
     });
 
-    unsubscribersRef.current = [unsubConnected, unsubDisconnected, unsubProgress, unsubLog, unsubResult, unsubError];
+    unsubscribersRef.current = [
+        unsubConnected, 
+        unsubDisconnected, 
+        unsubProgress, 
+        unsubLog, 
+        unsubMessage, // Ajout du listener custom
+        unsubResult, 
+        unsubError
+    ];
+    
     return () => unsubscribersRef.current.forEach((unsub) => unsub());
   }, []);
 
@@ -235,11 +266,10 @@ const SurveyGenerator = () => {
   useEffect(() => scrollToBottom(), [messages]);
   const addSystemMessage = (text) => setMessages((prev) => [...prev, { id: Date.now(), role: 'system', text, timestamp: new Date() }]);
 
-  // --- LANCEMENT ---
+  // --- ACTIONS ---
   const handleSendMessage = async (prompt) => {
     if (!connected) return;
 
-    // 1. Reset
     window.speechSynthesis.cancel();
     setMessages((prev) => [...prev, { id: Date.now(), role: 'user', text: prompt, timestamp: new Date() }]);
     setIsLoading(true);
@@ -248,15 +278,10 @@ const SurveyGenerator = () => {
     setError(null);
     hasSpokenGeoRef.current = false;
 
-    // 2. TTS SEQUENCE
+    // TTS SEQUENCE
     if(isTtsEnabledRef.current) {
-        // A. Phrase courte (Start) - Coupe tout
         speakText(getRandomPhrase('START'), 'CRITICAL');
-        
-        // B. Le Résumé Énuméré (1, 2, 3 + Logs + Patienter) - S'ajoute à la suite
         speakText(getRandomPhrase('PLAN'), 'NORMAL');
-        
-        // C. On bloque la lecture des logs pendant 17 secondes (le texte est dense)
         lastLogTimeRef.current = Date.now() + 17000; 
     }
 
@@ -273,6 +298,7 @@ const SurveyGenerator = () => {
     const lastPrompt = [...messages].reverse().find(m => m.role === 'user')?.text;
     if (lastPrompt) handleSendMessage(lastPrompt);
   };
+  
   const handleViewMap = () => {
     if (surveyData?.locations?.length > 0) setShowMap(true);
     else MySwal.fire({ icon: 'info', text: 'Pas de lieux disponibles' });
@@ -305,7 +331,7 @@ const SurveyGenerator = () => {
     <div className="flex h-screen bg-white">
       <div className="flex-1 flex flex-col" ref={containerRef}>
         
-        {/* Header */}
+        {/* Header Status */}
         <div className="bg-white border-b border-gray-300 px-6 py-2 flex items-center justify-between text-xs">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">

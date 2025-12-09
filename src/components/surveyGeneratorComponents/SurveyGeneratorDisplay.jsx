@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ChevronDown,
   ChevronUp,
@@ -7,18 +7,22 @@ import {
   Clock,
   Zap,
   HelpCircle,
+  Cpu // Nouvelle icône pour l'IA
 } from 'lucide-react';
 
 const SurveyGeneratorDisplay = ({ surveyData }) => {
   const [expandedCategory, setExpandedCategory] = useState(0);
   const [expandedQuestions, setExpandedQuestions] = useState({});
 
-  const { metadata, categories, locations } = surveyData;
+  // Sécurisation des données pour le mode streaming (valeurs par défaut)
+  const metadata = surveyData?.metadata || {};
+  const categories = surveyData?.categories || [];
+  const locations = surveyData?.locations || [];
 
   const GREEN_COLOR = '#5DA781';
 
   const totalQuestions = categories.reduce(
-    (sum, cat) => sum + cat.questions.length,
+    (sum, cat) => sum + (cat.questions ? cat.questions.length : 0),
     0
   );
 
@@ -28,6 +32,14 @@ const SurveyGeneratorDisplay = ({ surveyData }) => {
       [qId]: !prev[qId],
     }));
   };
+
+  // Petit effet visuel quand une nouvelle catégorie arrive
+  useEffect(() => {
+    if (categories.length > 0) {
+      // Optionnel : on peut auto-ouvrir la dernière catégorie reçue si on veut
+      // setExpandedCategory(categories.length - 1);
+    }
+  }, [categories.length]);
 
   return (
     <div className="space-y-6">
@@ -44,7 +56,7 @@ const SurveyGeneratorDisplay = ({ surveyData }) => {
             <div>
               <p className="text-xs text-gray-600 mb-1">Durée estimée</p>
               <p className="text-lg font-semibold text-gray-800">
-                {metadata.survey_total_duration}
+                {metadata.survey_total_duration || '...'}
               </p>
             </div>
             <Clock
@@ -59,7 +71,7 @@ const SurveyGeneratorDisplay = ({ surveyData }) => {
             <div>
               <p className="text-xs text-gray-600 mb-1">Répondants</p>
               <p className="text-lg font-semibold text-gray-800">
-                {metadata.number_of_respondents}
+                {metadata.number_of_respondents || '...'}
               </p>
             </div>
             <Users className="w-8 h-8 text-blue-500 opacity-50" />
@@ -71,7 +83,7 @@ const SurveyGeneratorDisplay = ({ surveyData }) => {
             <div>
               <p className="text-xs text-gray-600 mb-1">Enquêteurs</p>
               <p className="text-lg font-semibold text-gray-800">
-                {metadata.number_of_investigators}
+                {metadata.number_of_investigators || '...'}
               </p>
             </div>
             <Zap className="w-8 h-8 text-purple-500 opacity-50" />
@@ -83,7 +95,7 @@ const SurveyGeneratorDisplay = ({ surveyData }) => {
             <div>
               <p className="text-xs text-gray-600 mb-1">Localités</p>
               <p className="text-lg font-semibold text-gray-800">
-                {metadata.number_of_locations}
+                {metadata.number_of_locations || locations.length || '...'}
               </p>
             </div>
             <MapPin className="w-8 h-8 text-orange-500 opacity-50" />
@@ -97,7 +109,7 @@ const SurveyGeneratorDisplay = ({ surveyData }) => {
           Objectif de l'enquête
         </h2>
         <p className="text-sm text-gray-700 leading-relaxed">
-          {metadata.survey_objective}
+          {metadata.survey_objective || "Analyse en cours..."}
         </p>
         <p className="text-xs text-gray-600 mt-4">
           <span className="font-medium">Audience cible:</span>{' '}
@@ -111,7 +123,7 @@ const SurveyGeneratorDisplay = ({ surveyData }) => {
 
       {/* Questions Statistics */}
       <div
-        className="border-2 rounded-lg p-4"
+        className="border-2 rounded-lg p-4 transition-all duration-300"
         style={{
           backgroundColor: '#f0f7f3',
           borderColor: GREEN_COLOR,
@@ -124,12 +136,12 @@ const SurveyGeneratorDisplay = ({ surveyData }) => {
         </p>
       </div>
 
-      {/* Survey Categories */}
+      {/* Survey Categories (Affichage Progressif) */}
       <div className="space-y-3">
         <h2 className="text-lg font-semibold text-gray-900">Questions</h2>
 
         {categories.map((category, categoryIndex) => (
-          <div key={categoryIndex} className="border border-gray-300 rounded-lg overflow-hidden">
+          <div key={categoryIndex} className="border border-gray-300 rounded-lg overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
             {/* Category Header */}
             <button
               onClick={() =>
@@ -140,16 +152,28 @@ const SurveyGeneratorDisplay = ({ surveyData }) => {
               className="w-full bg-gray-50 hover:bg-gray-100 px-6 py-4 flex items-center justify-between transition-colors duration-200 border-b border-gray-200"
             >
               <div className="text-left">
-                <h3 className="text-sm font-semibold text-gray-900">
-                  {category.category_name}
-                </h3>
+                <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-gray-900">
+                    {category.category_name}
+                    </h3>
+                    
+                    {/* Badge Source IA (Nouveau mais discret) */}
+                    {category.source_llm && (
+                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gray-200 border border-gray-300" title={`Généré par ${category.source_llm}`}>
+                            <Cpu className="w-3 h-3 text-gray-600" />
+                            <span className="text-[10px] font-medium text-gray-600 uppercase tracking-wider">
+                                {category.source_llm}
+                            </span>
+                        </div>
+                    )}
+                </div>
                 <p className="text-xs text-gray-600 mt-1">
                   {category.description}
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-gray-700 bg-white px-2 py-1 rounded border border-gray-300">
-                  {category.questions.length} Q
+                  {category.questions ? category.questions.length : 0} Q
                 </span>
                 {expandedCategory === categoryIndex ? (
                   <ChevronUp className="w-5 h-5 text-gray-500" />
@@ -162,7 +186,7 @@ const SurveyGeneratorDisplay = ({ surveyData }) => {
             {/* Category Questions */}
             {expandedCategory === categoryIndex && (
               <div className="divide-y divide-gray-200 bg-white">
-                {category.questions.map((question, qIndex) => (
+                {category.questions && category.questions.map((question, qIndex) => (
                   <div key={qIndex} className="p-4 hover:bg-gray-50 transition-colors">
                     <button
                       onClick={() => toggleQuestion(question.question_id)}
@@ -247,6 +271,14 @@ const SurveyGeneratorDisplay = ({ surveyData }) => {
             )}
           </div>
         ))}
+        
+        {/* Loader si aucune catégorie n'est encore là */}
+        {categories.length === 0 && (
+            <div className="flex items-center justify-center p-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                <Loader className="w-6 h-6 animate-spin text-gray-400" />
+                <span className="ml-2 text-sm text-gray-500">Génération des questions en cours...</span>
+            </div>
+        )}
       </div>
 
       {/* Locations Info */}
@@ -266,7 +298,7 @@ const SurveyGeneratorDisplay = ({ surveyData }) => {
                 className="border border-gray-300 rounded-lg p-4 hover:bg-gray-50 transition-colors"
               >
                 <p className="font-semibold text-gray-900">{location.name}</p>
-                <p className="text-xs text-gray-600 mt-1">📍 {location.pcode}</p>
+                <p className="text-xs text-gray-600 mt-1">📍 {location.pcode || 'N/A'}</p>
                 <p className="text-xs text-gray-600">
                   {location.adm2}, {location.adm1}
                 </p>
