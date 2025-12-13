@@ -38,7 +38,7 @@ const Clustering3DVisualization = ({ scatterPoints = [], dna = {}, colors = [] }
   }, [scatterPoints, dna]);
 
   // --- 2. UTILITAIRES ---
-  const createTextLabel = (text, position, color = 'white', size = 32) => { // Texte plus grand
+  const createTextLabel = (text, position, color = 'white', size = 32) => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     ctx.font = `bold ${size}px Arial`;
@@ -85,10 +85,9 @@ const Clustering3DVisualization = ({ scatterPoints = [], dna = {}, colors = [] }
         const width = containerRef.current.clientWidth;
         const height = containerRef.current.clientHeight;
 
-        // SCENE (Fond un peu plus clair pour contraste)
+        // SCENE
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x1a202c); // Gris bleu nuit (plus doux que noir pur)
-        // scene.fog = new THREE.FogExp2(0x1a202c, 0.012); // Brouillard léger
+        scene.background = new THREE.Color(0x1a202c);
         sceneRef.current = scene;
 
         // CAMERA
@@ -106,15 +105,14 @@ const Clustering3DVisualization = ({ scatterPoints = [], dna = {}, colors = [] }
         });
         renderer.setSize(width, height);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        // Activation des ombres/lumières physiquement correctes
         renderer.useLegacyLights = false;
         renderer.outputColorSpace = THREE.SRGBColorSpace;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 1.2; // Augmente la luminosité globale
+        renderer.toneMappingExposure = 1.2;
         rendererRef.current = renderer;
 
-        // --- LUMIÈRES (RENFORCÉES) ---
-        const ambientLight = new THREE.AmbientLight(0xffffff, 1.5); // Lumière ambiante très forte
+        // --- LUMIÈRES ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
         scene.add(ambientLight);
         
         const dirLight = new THREE.DirectionalLight(0xffffff, 2);
@@ -128,17 +126,17 @@ const Clustering3DVisualization = ({ scatterPoints = [], dna = {}, colors = [] }
         axisGroup.add(createAxis(new THREE.Vector3(0, 0, -30), new THREE.Vector3(0, 0, 30), '#ae3bf6ff', 'Axe Z'));
         scene.add(axisGroup);
 
-        // Grille plus visible
+        // Grille
         const grid = new THREE.GridHelper(60, 20, 0x475569, 0x334155);
         grid.position.y = -15;
         scene.add(grid);
 
         // --- POINTS LUMINEUX ---
-        const geometry = new THREE.SphereGeometry(1.0, 32, 32); // Sphères plus lisses et un peu plus grosses
+        const geometry = new THREE.SphereGeometry(1.0, 32, 32);
         const material = new THREE.MeshPhysicalMaterial({ 
-            roughness: 0.1,  // Très lisse (brillant)
+            roughness: 0.1,
             metalness: 0.1,
-            clearcoat: 1.0,  // Vernis
+            clearcoat: 1.0,
             clearcoatRoughness: 0.1
         });
 
@@ -146,9 +144,9 @@ const Clustering3DVisualization = ({ scatterPoints = [], dna = {}, colors = [] }
         const dummy = new THREE.Object3D();
 
         pointsToRender.forEach(p => {
-            const cId = p.cluster % (colors.length || 4);
+            const cId = p.cluster % (colors.length || 3);
             if (!clusterGroups[cId]) clusterGroups[cId] = [];
-            dummy.position.set(p.x * 4, p.y * 4, p.z * 4); // Espacement x4
+            dummy.position.set(p.x * 4, p.y * 4, p.z * 4);
             dummy.updateMatrix();
             clusterGroups[cId].push(dummy.matrix.clone());
         });
@@ -159,9 +157,8 @@ const Clustering3DVisualization = ({ scatterPoints = [], dna = {}, colors = [] }
             
             const mat = material.clone();
             mat.color = color;
-            // C'est ici que la magie opère pour la luminosité :
             mat.emissive = color;
-            mat.emissiveIntensity = 2   ; // Très lumineux (effet néon)
+            mat.emissiveIntensity = 2;
             
             const mesh = new THREE.InstancedMesh(geometry, mat, matrices.length);
             matrices.forEach((m, i) => mesh.setMatrixAt(i, m));

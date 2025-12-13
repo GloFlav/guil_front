@@ -10,10 +10,11 @@ const AnalysisResults = ({ data }) => {
   const [activeTab, setActiveTab] = useState('overview');
   const [hoverData, setHoverData] = useState(null);
   const [expandedVariable, setExpandedVariable] = useState(null);
-  const [chartFilter, setChartFilter] = useState('all'); // 'all', 'high-variance', 'skewed', 'outliers'
+  const [chartFilter, setChartFilter] = useState('all');
   
   const GREEN_COLOR = '#5DA781';
-  const CLUSTER_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+  // ✅ COULEURS CLUSTERING MODIFIÉES: ROUGE, JAUNE, VERT
+  const CLUSTER_COLORS = ['#dc2626', '#eab308', '#16a34a'];
 
   // Protection critique
   if (!data || !data.summary_stats) {
@@ -35,7 +36,6 @@ const AnalysisResults = ({ data }) => {
   const targetVariable = summary.target || summary.auto_target || "Non détectée";
   const analysisType = data.analysis_type || "Exploratoire";
 
-  // Filtrage des insights
   const clusterInsights = insights.filter(i => 
     (i.title && i.title.toLowerCase().includes('segment')) ||
     (i.title && i.title.toLowerCase().includes('groupe')) ||
@@ -43,27 +43,22 @@ const AnalysisResults = ({ data }) => {
   );
   const generalInsights = insights.filter(i => !clusterInsights.includes(i));
 
-  // =========================================================
-  // LOGIQUE DE PRIORISATION DES DISTRIBUTIONS
-  // =========================================================
-
   const getPrioritizedDistributions = () => {
     const allVars = Object.entries(eda.univariate || {});
     
-    // Scoring multidimensionnel
     const scored = allVars
-      .filter(([_, stats]) => stats.type === 'numeric') // Seulement numériques
+      .filter(([_, stats]) => stats.type === 'numeric')
       .map(([name, stats]) => {
-        const variance_score = Math.min((stats.cv || 0) / 2, 1); // Coefficient variation
-        const skewness_score = Math.min(Math.abs(stats.skew || 0) / 2, 1); // Asymétrie
-        const completeness_score = 1 - ((stats.missing_pct || 0) / 100); // Complétude
-        const outlier_score = Math.min(Math.abs((stats.q3 || 0) - (stats.q1 || 0)) || 0 / ((stats.max || 1) - (stats.min || 0)), 1); // Outliers
+        const variance_score = Math.min((stats.cv || 0) / 2, 1);
+        const skewness_score = Math.min(Math.abs(stats.skew || 0) / 2, 1);
+        const completeness_score = 1 - ((stats.missing_pct || 0) / 100);
+        const outlier_score = Math.min(Math.abs((stats.q3 || 0) - (stats.q1 || 0)) || 0 / ((stats.max || 1) - (stats.min || 0)), 1);
         
         const composite_score = 
-          variance_score * 0.35 +      // Variabilité importante
-          skewness_score * 0.30 +      // Asymétrie intéressante
-          completeness_score * 0.20 +  // Données complètes
-          outlier_score * 0.15;        // Présence d'outliers
+          variance_score * 0.35 +
+          skewness_score * 0.30 +
+          completeness_score * 0.20 +
+          outlier_score * 0.15;
         
         return {
           name,
@@ -79,7 +74,6 @@ const AnalysisResults = ({ data }) => {
       })
       .sort((a, b) => b.composite_score - a.composite_score);
 
-    // Catégorisation
     const highVariance = scored.filter(v => v.scores.variance > 0.6);
     const skewed = scored.filter(v => v.scores.skewness > 0.5 && !highVariance.includes(v));
     const outliers = scored.filter(v => v.scores.outliers > 0.5 && !highVariance.includes(v) && !skewed.includes(v));
@@ -96,10 +90,6 @@ const AnalysisResults = ({ data }) => {
   };
 
   const distributions = getPrioritizedDistributions();
-
-  // =========================================================
-  // SOUS-COMPOSANTS
-  // =========================================================
 
   const TooltipComponent = () => {
     if (!hoverData) return null;
@@ -119,10 +109,8 @@ const AnalysisResults = ({ data }) => {
     setHoverData({ x: rect.left + rect.width / 2, y: rect.top, content });
   };
 
-  // Composant: Stats Card améliorée
   const StatsCard = ({ variable, stats }) => {
     if (stats.type !== 'numeric') return null;
-
     const isExpanded = expandedVariable === variable;
 
     return (
@@ -130,7 +118,6 @@ const AnalysisResults = ({ data }) => {
         className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all cursor-pointer"
         onClick={() => setExpandedVariable(isExpanded ? null : variable)}
       >
-        {/* Header */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex-1">
             <h4 className="font-bold text-gray-900 text-sm truncate">{variable}</h4>
@@ -145,7 +132,6 @@ const AnalysisResults = ({ data }) => {
           </div>
         </div>
 
-        {/* Affichage Normal */}
         {!isExpanded && (
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="bg-blue-50 p-2 rounded">
@@ -163,7 +149,6 @@ const AnalysisResults = ({ data }) => {
           </div>
         )}
 
-        {/* Affichage Expanded */}
         {isExpanded && (
           <div className="space-y-2 text-[10px] bg-gray-50 p-3 rounded border border-gray-100">
             <div className="grid grid-cols-2 gap-2">
@@ -182,10 +167,8 @@ const AnalysisResults = ({ data }) => {
     );
   };
 
-  // Composant: Distribution enrichie (Histogramme + Boxplot)
   const EnhancedDistribution = ({ col, data, stats }) => {
     if (!data) return null;
-
     const maxVal = Math.max(...data.histogram.map(d => d.count));
     const { min, max, q1, median, q3, lower, upper } = data.boxplot;
     const range = max - min;
@@ -208,7 +191,6 @@ const AnalysisResults = ({ data }) => {
           </div>
         </div>
 
-        {/* Histogramme */}
         <div className="flex items-end h-20 gap-0.5 border-b border-gray-100 pb-2 mb-3">
           {data.histogram.map((bin, i) => (
             <div
@@ -225,23 +207,19 @@ const AnalysisResults = ({ data }) => {
           ))}
         </div>
 
-        {/* Boxplot */}
         <div
           className="relative h-8 w-full cursor-help"
           onMouseEnter={(e) => showTooltip(e, `Min: ${min} | Q1: ${q1} | Med: ${median} | Q3: ${q3} | Max: ${max}`)}
           onMouseLeave={() => setHoverData(null)}
         >
           <div className="absolute top-1/2 left-0 w-full h-[1px] bg-gray-200"></div>
-          {/* Whiskers */}
           <div className="absolute top-1/2 h-[1px] bg-gray-500" style={{ left: `${getPos(lower)}%`, width: `${getPos(upper) - getPos(lower)}%` }}></div>
           <div className="absolute top-1/2 -translate-y-1/2 w-[2px] h-3 bg-gray-400" style={{ left: `${getPos(lower)}%` }}></div>
           <div className="absolute top-1/2 -translate-y-1/2 w-[2px] h-3 bg-gray-400" style={{ left: `${getPos(upper)}%` }}></div>
-          {/* Box */}
           <div
             className="absolute top-1/2 -translate-y-1/2 h-4 bg-gradient-to-r from-blue-100 to-blue-200 border-2 border-blue-500 rounded"
             style={{ left: `${getPos(q1)}%`, width: `${getPos(q3) - getPos(q1)}%` }}
           ></div>
-          {/* Médiane */}
           <div className="absolute top-1/2 -translate-y-1/2 w-[3px] h-5 bg-red-600 z-10" style={{ left: `${getPos(median)}%` }}></div>
         </div>
         <p className="text-[8px] text-gray-400 text-center mt-2 font-mono">←whisker-Q1-[median]-Q3-whisker→</p>
@@ -249,7 +227,6 @@ const AnalysisResults = ({ data }) => {
     );
   };
 
-  // Composant: Violin Plot (Densité)
   const ViolinPlot = ({ col, data, stats }) => {
     if (!data) return null;
     const { min, max, q1, median, q3 } = data.boxplot;
@@ -269,28 +246,21 @@ const AnalysisResults = ({ data }) => {
           </span>
         </div>
 
-        {/* Violin Plot simplifié */}
         <div className="flex items-center justify-center h-32 relative">
-          {/* Axe central */}
           <div className="absolute top-0 bottom-0 left-1/2 w-[1px] bg-gray-200"></div>
-          
-          {/* Violon gauche + droit */}
           <svg className="w-full h-full" viewBox="0 0 100 120" preserveAspectRatio="none">
-            {/* Côté gauche */}
             <path
               d={`M 50 10 Q ${50 - Math.min(data.histogram[0]?.count / maxCount * 15, 15)} 30, ${50 - Math.min(data.histogram[Math.floor(data.histogram.length * 0.5)]?.count / maxCount * 15, 15)} 60 Q ${50 - Math.min(data.histogram[0]?.count / maxCount * 15, 15)} 90, 50 110 Z`}
               fill="rgba(168, 85, 247, 0.3)"
               stroke="rgba(168, 85, 247, 0.8)"
               strokeWidth="0.5"
             />
-            {/* Côté droit */}
             <path
               d={`M 50 10 Q ${50 + Math.min(data.histogram[0]?.count / maxCount * 15, 15)} 30, ${50 + Math.min(data.histogram[Math.floor(data.histogram.length * 0.5)]?.count / maxCount * 15, 15)} 60 Q ${50 + Math.min(data.histogram[0]?.count / maxCount * 15, 15)} 90, 50 110 Z`}
               fill="rgba(168, 85, 247, 0.3)"
               stroke="rgba(168, 85, 247, 0.8)"
               strokeWidth="0.5"
             />
-            {/* Quartiles */}
             <line x1="30" y1={`${getPos(q1) * 1.1}`} x2="70" y2={`${getPos(q1) * 1.1}`} stroke="#fbbf24" strokeWidth="1" />
             <line x1="30" y1={`${getPos(median) * 1.1}`} x2="70" y2={`${getPos(median) * 1.1}`} stroke="#dc2626" strokeWidth="2" />
             <line x1="30" y1={`${getPos(q3) * 1.1}`} x2="70" y2={`${getPos(q3) * 1.1}`} stroke="#fbbf24" strokeWidth="1" />
@@ -304,11 +274,9 @@ const AnalysisResults = ({ data }) => {
     );
   };
 
-  // Composant: Distribution Cumulative
   const CumulativeDistribution = ({ col, data, stats }) => {
     if (!data) return null;
     const { min, max } = data.boxplot;
-    const range = max - min;
     let cumulative = 0;
     const cumulativeData = data.histogram.map((bin) => {
       cumulative += bin.count;
@@ -328,13 +296,9 @@ const AnalysisResults = ({ data }) => {
           </span>
         </div>
 
-        {/* Courbe cumulative */}
         <svg className="w-full border border-gray-100 rounded bg-gradient-to-br from-green-50 to-white" viewBox="0 0 300 150" preserveAspectRatio="none">
-          {/* Grille */}
           <line x1="20" y1="130" x2="280" y2="130" stroke="#e5e7eb" strokeWidth="0.5" />
           <line x1="20" y1="10" x2="20" y2="130" stroke="#e5e7eb" strokeWidth="0.5" />
-          
-          {/* Courbe */}
           <polyline
             points={cumulativeData.map((val, i) => {
               const x = 20 + (i / (cumulativeData.length - 1 || 1)) * 260;
@@ -346,8 +310,6 @@ const AnalysisResults = ({ data }) => {
             strokeWidth="2"
             strokeLinecap="round"
           />
-          
-          {/* Aire sous la courbe */}
           <polygon
             points={`20,130 ${cumulativeData.map((val, i) => {
               const x = 20 + (i / (cumulativeData.length - 1 || 1)) * 260;
@@ -356,8 +318,6 @@ const AnalysisResults = ({ data }) => {
             }).join(' ')} 280,130`}
             fill="rgba(16, 185, 129, 0.15)"
           />
-
-          {/* Labels */}
           <text x="10" y="135" fontSize="8" fill="#666">0%</text>
           <text x="270" y="135" fontSize="8" fill="#666">100%</text>
         </svg>
@@ -367,7 +327,6 @@ const AnalysisResults = ({ data }) => {
     );
   };
 
-  // Composant: Q-Q Plot (Normalité)
   const QQPlot = ({ col, data, stats }) => {
     if (!data || !data.histogram) return null;
 
@@ -387,16 +346,10 @@ const AnalysisResults = ({ data }) => {
           </span>
         </div>
 
-        {/* Q-Q Plot simplifié */}
         <svg className="w-full border border-gray-100 rounded bg-gradient-to-br from-blue-50 to-white" viewBox="0 0 150 150" preserveAspectRatio="none">
-          {/* Axes */}
           <line x1="20" y1="130" x2="130" y2="130" stroke="#9ca3af" strokeWidth="1" />
           <line x1="20" y1="10" x2="20" y2="130" stroke="#9ca3af" strokeWidth="1" />
-          
-          {/* Ligne de référence (normalité parfaite) */}
           <line x1="20" y1="130" x2="130" y2="10" stroke="#10b981" strokeWidth="1" strokeDasharray="3,2" opacity="0.5" />
-          
-          {/* Points Q-Q (simulations) */}
           {data.histogram.slice(0, 10).map((_, i) => {
             const x = 20 + (i / 10) * 110;
             const y = 130 - (i / 10) * 120 - (Math.random() - 0.5) * 15;
@@ -404,8 +357,6 @@ const AnalysisResults = ({ data }) => {
               <circle key={i} cx={x} cy={y} r="2" fill="#3b82f6" opacity="0.7" />
             );
           })}
-          
-          {/* Labels */}
           <text x="5" y="135" fontSize="8" fill="#666">Théorique</text>
           <text x="110" y="145" fontSize="8" fill="#666">Empirique</text>
         </svg>
@@ -415,7 +366,6 @@ const AnalysisResults = ({ data }) => {
     );
   };
 
-  // Composant: Pie Chart amélioré
   const EnhancedPieChart = ({ data, title }) => {
     const total = data.reduce((sum, item) => sum + item.value, 0);
     let cumulative = 0;
@@ -454,7 +404,6 @@ const AnalysisResults = ({ data }) => {
     );
   };
 
-  // Composant: Scatter Plot amélioré
   const EnhancedScatterPlot = ({ data, title, xLabel, yLabel, correlation, sampleSize }) => {
     if (!data || data.length === 0) return null;
 
@@ -474,12 +423,10 @@ const AnalysisResults = ({ data }) => {
         </div>
 
         <div className="relative h-40 w-full border border-gray-200 bg-gradient-to-br from-blue-50 to-white mt-2 rounded">
-          {/* Grille */}
           <div className="absolute inset-0 grid grid-cols-5 grid-rows-5 pointer-events-none opacity-30">
             {[...Array(25)].map((_, i) => <div key={i} className="border-r border-t border-gray-200 last:border-0"></div>)}
           </div>
 
-          {/* Points */}
           {data.map((point, i) => (
             <div
               key={i}
@@ -502,7 +449,93 @@ const AnalysisResults = ({ data }) => {
     );
   };
 
-  // Composant: Corrélation améliorée
+  const StatisticalTestsResults = ({ tests }) => {
+    if (!tests || tests.length === 0) {
+      return <p className="text-xs text-gray-400 p-4">Aucun test statistique disponible.</p>;
+    }
+
+    return (
+      <div className="space-y-3">
+        {tests.map((test, idx) => {
+          const isSignificant = test.p_value < 0.05;
+          const testType = test.test_type || 'Unknown';
+          const effectSize = test.effect_size?.value || 'N/A';
+          const effectInterpretation = test.effect_size?.interpretation || '';
+
+          return (
+            <div
+              key={idx}
+              className={`border-l-4 rounded-r-lg p-4 shadow-sm hover:shadow-md transition-all ${
+                isSignificant
+                  ? 'border-green-500 bg-green-50'
+                  : 'border-amber-500 bg-amber-50'
+              }`}
+            >
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex-1">
+                  <h5 className="text-sm font-bold text-gray-900">
+                    {test.variable1} {testType === 'ttest' ? 'vs' : '×'} {test.variable2}
+                  </h5>
+                  <p className="text-[9px] text-gray-600 mt-1">
+                    Test: <span className="font-mono font-bold">{testType.toUpperCase()}</span>
+                  </p>
+                </div>
+                <span
+                  className={`text-xs font-bold px-2 py-1 rounded ${
+                    isSignificant
+                      ? 'bg-green-200 text-green-800'
+                      : 'bg-amber-200 text-amber-800'
+                  }`}
+                >
+                  {isSignificant ? '✓ Sig.' : '○ N.S.'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[9px] mb-2">
+                <div className="bg-white p-2 rounded border border-gray-100">
+                  <p className="text-gray-600">Statistique</p>
+                  <p className="font-bold text-gray-900">
+                    {test.statistic?.toFixed(3) || 'N/A'}
+                  </p>
+                </div>
+
+                <div className="bg-white p-2 rounded border border-gray-100">
+                  <p className="text-gray-600">p-value</p>
+                  <p className={`font-bold ${isSignificant ? 'text-green-600' : 'text-amber-600'}`}>
+                    {test.p_value < 0.001 ? '< 0.001' : test.p_value?.toFixed(4) || 'N/A'}
+                  </p>
+                </div>
+
+                <div className="bg-white p-2 rounded border border-gray-100">
+                  <p className="text-gray-600">Taille d'effet</p>
+                  <p className="font-bold text-gray-900">{effectSize}</p>
+                </div>
+
+                {test.df !== undefined && (
+                  <div className="bg-white p-2 rounded border border-gray-100">
+                    <p className="text-gray-600">DF</p>
+                    <p className="font-bold text-gray-900">{test.df}</p>
+                  </div>
+                )}
+              </div>
+
+              {effectInterpretation && (
+                <div className="text-[8px] text-gray-700 bg-white bg-opacity-50 p-2 rounded border border-gray-100">
+                  <p className="font-semibold">Interprétation:</p>
+                  <p>{effectInterpretation}</p>
+                </div>
+              )}
+
+              <div className="text-[8px] text-gray-600 mt-2 italic">
+                H₀: {test.null_hypothesis || 'Pas de différence entre groupes'}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const CorrelationHeatmap = ({ matrix }) => {
     if (!matrix || Object.keys(matrix).length === 0) {
       return <p className="text-xs text-gray-400 p-4">Données de corrélation insuffisantes.</p>;
@@ -561,12 +594,10 @@ const AnalysisResults = ({ data }) => {
     );
   };
 
-  // RENDU PRINCIPAL
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       <TooltipComponent />
 
-      {/* HEADER */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <div className="md:col-span-4 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 p-5 rounded-xl shadow-sm flex items-start gap-4">
           <div className="bg-indigo-100 p-3 rounded-lg border border-indigo-300 shadow-inner">
@@ -588,7 +619,6 @@ const AnalysisResults = ({ data }) => {
           </div>
         </div>
 
-        {/* KPIs */}
         <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all">
           <p className="text-[9px] font-bold text-gray-500 uppercase">Lignes</p>
           <p className="text-2xl font-bold text-gray-800">{totalRows.toLocaleString()}</p>
@@ -607,12 +637,12 @@ const AnalysisResults = ({ data }) => {
         </div>
       </div>
 
-      {/* NAVIGATION */}
       <div className="border-b border-gray-200 flex gap-2 overflow-x-auto px-2">
         {[
           { id: 'overview', icon: TrendingUp, label: 'Synthèse' },
           { id: 'stats', icon: BarChart3, label: 'Variables' },
           { id: 'charts', icon: Activity, label: 'Graphiques' },
+          { id: 'tests', icon: Target, label: 'Tests Stat.' },
           { id: 'clustering', icon: Users, label: 'Segmentation' },
           { id: 'corr', icon: GitMerge, label: 'Corrélations' },
         ].map(tab => (
@@ -631,9 +661,7 @@ const AnalysisResults = ({ data }) => {
         ))}
       </div>
 
-      {/* CONTENU */}
       <div className="min-h-[500px]">
-        {/* SYNTHÈSE */}
         {activeTab === 'overview' && (
           <div className="grid grid-cols-1 gap-4">
             {generalInsights.map((ins, idx) => (
@@ -654,7 +682,6 @@ const AnalysisResults = ({ data }) => {
           </div>
         )}
 
-        {/* STATS VARIABLES */}
         {activeTab === 'stats' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Object.entries(eda.univariate || {}).map(([variable, stats]) => (
@@ -663,10 +690,49 @@ const AnalysisResults = ({ data }) => {
           </div>
         )}
 
-        {/* GRAPHIQUES */}
+        {activeTab === 'tests' && (
+          <div className="space-y-4">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-4 rounded-lg">
+              <div className="flex items-start gap-3">
+                <div className="bg-blue-100 p-3 rounded-lg">
+                  <Target className="w-5 h-5 text-blue-700" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-blue-900 mb-1">Tests Statistiques Préliminaires</h3>
+                  <p className="text-xs text-blue-700">
+                    T-tests, Chi-2 et analyse de variance pour valider les relations entre variables.
+                    <br/>
+                    <span className="font-semibold">p &lt; 0.05</span> = Significatif | 
+                    <span className="font-semibold ml-2">p &gt; 0.05</span> = Non significatif
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {eda.tests && eda.tests.length > 0 ? (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-sm font-bold text-gray-900">
+                    Tests Découverts ({eda.tests.length})
+                  </h4>
+                  <span className="text-[9px] bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-200">
+                    vs {targetVariable}
+                  </span>
+                </div>
+                <StatisticalTestsResults tests={eda.tests} />
+              </div>
+            ) : (
+              <div className="text-center p-8 border-2 border-dashed border-gray-200 rounded-lg">
+                <AlertCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                <p className="text-sm text-gray-600">Aucun test significatif trouvé.</p>
+                <p className="text-xs text-gray-500 mt-1">Les variables ne montrent pas de relations statistiquement significatives.</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === 'charts' && (
           <div className="space-y-6">
-            {/* Filtres */}
             <div className="flex gap-2 flex-wrap">
               <button
                 onClick={() => setChartFilter('all')}
@@ -714,7 +780,6 @@ const AnalysisResults = ({ data }) => {
               </button>
             </div>
 
-            {/* Section : Haute Variance */}
             {(chartFilter === 'all' || chartFilter === 'high-variance') && distributions.highVariance.length > 0 && (
               <div>
                 <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2 pb-2 border-b border-green-200">
@@ -726,7 +791,6 @@ const AnalysisResults = ({ data }) => {
                     const distData = charts.distributions[name];
                     if (!distData) return null;
                     
-                    // Alterne entre Histogramme et Violon
                     const showViolin = idx % 2 === 1;
                     return showViolin ? (
                       <ViolinPlot key={name} col={name} data={distData} stats={stats} />
@@ -738,7 +802,6 @@ const AnalysisResults = ({ data }) => {
               </div>
             )}
 
-            {/* Section : Asymétriques */}
             {(chartFilter === 'all' || chartFilter === 'skewed') && distributions.skewed.length > 0 && (
               <div>
                 <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2 pb-2 border-b border-amber-200">
@@ -750,7 +813,6 @@ const AnalysisResults = ({ data }) => {
                     const distData = charts.distributions[name];
                     if (!distData) return null;
                     
-                    // Alterne entre Q-Q Plot et Cumulative
                     const showQQ = idx % 2 === 0;
                     return showQQ ? (
                       <QQPlot key={name} col={name} data={distData} stats={stats} />
@@ -762,7 +824,6 @@ const AnalysisResults = ({ data }) => {
               </div>
             )}
 
-            {/* Section : Outliers */}
             {(chartFilter === 'all' || chartFilter === 'outliers') && distributions.outliers.length > 0 && (
               <div>
                 <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2 pb-2 border-b border-red-200">
@@ -774,7 +835,6 @@ const AnalysisResults = ({ data }) => {
                     const distData = charts.distributions[name];
                     if (!distData) return null;
                     
-                    // Combine Violon + Cumulative pour mieux voir les outliers
                     const showViolin = idx % 2 === 0;
                     return showViolin ? (
                       <ViolinPlot key={name} col={name} data={distData} stats={stats} />
@@ -786,7 +846,6 @@ const AnalysisResults = ({ data }) => {
               </div>
             )}
 
-            {/* Section : Autres Variables */}
             {(chartFilter === 'all') && distributions.remaining.length > 0 && (
               <div>
                 <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2 pb-2 border-b border-gray-200">
@@ -798,7 +857,6 @@ const AnalysisResults = ({ data }) => {
                     const distData = charts.distributions[name];
                     if (!distData) return null;
                     
-                    // Affiche Cumulative pour avoir une vue complète
                     return (
                       <CumulativeDistribution key={name} col={name} data={distData} stats={stats} />
                     );
@@ -807,7 +865,6 @@ const AnalysisResults = ({ data }) => {
               </div>
             )}
 
-            {/* Camemberts */}
             {charts.pies?.length > 0 && (
               <div>
                 <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
@@ -822,7 +879,6 @@ const AnalysisResults = ({ data }) => {
               </div>
             )}
 
-            {/* Nuages */}
             {charts.scatters?.length > 0 && (
               <div>
                 <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
@@ -847,20 +903,17 @@ const AnalysisResults = ({ data }) => {
           </div>
         )}
 
-        {/* ✅ SEGMENTATION 3D - AVEC CLUSTERING3DVISUALIZATION */}
         {activeTab === 'clustering' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[500px]">
             
-            {/* 🎨 GRAPHE 3D INTERACTIF - REMPLACE LE FOND NOIR */}
             <div className="lg:col-span-2 h-full rounded-2xl shadow-lg overflow-hidden border border-gray-800">
               <Clustering3DVisualization 
                 scatterPoints={eda.clustering?.scatter_points || []}
                 dna={eda.clustering?.dna || {}}
-                colors={['#3b82f6', '#10b981', '#f59e0b', '#ef4444']}
+                colors={CLUSTER_COLORS}
               />
             </div>
 
-            {/* 📊 DÉTAILS CLUSTERS */}
             <div className="space-y-4 overflow-y-auto pr-2">
               {eda.clustering?.dna ? (
                 Object.entries(eda.clustering.dna).map(([name, data], i) => (
@@ -868,7 +921,7 @@ const AnalysisResults = ({ data }) => {
                     <div className="flex items-center gap-2 mb-3">
                       <div
                         className="w-3 h-3 rounded-full shadow-sm"
-                        style={{ backgroundColor: CLUSTER_COLORS[i % 4] }}
+                        style={{ backgroundColor: CLUSTER_COLORS[i % 3] }}
                       ></div>
                       <h5 className="text-xs font-bold text-gray-900">{name}</h5>
                       <span className="ml-auto text-[9px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
@@ -898,7 +951,6 @@ const AnalysisResults = ({ data }) => {
           </div>
         )}
 
-        {/* CORRÉLATIONS */}
         {activeTab === 'corr' && (
           <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
             <h3 className="text-sm font-bold text-gray-900 mb-4">Matrice de Corrélation de Pearson</h3>
