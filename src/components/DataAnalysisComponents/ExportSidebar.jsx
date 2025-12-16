@@ -13,17 +13,102 @@ import {
   Trash2,
   Filter,
   History,
-  FileCheck // Icone pour fichier validé
+  FileCheck,
+  Eye, // Nouvelle icône pour la prévisualisation
+  X    // Nouvelle icône pour fermer la modale
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import withReactContent from 'sweetalert2-react-content';
 
 const MySwal = withReactContent(Swal);
 
+// --- COMPOSANT MODALE DE PREVISUALISATION ---
+const PreviewModal = ({ isOpen, onClose, data, fileName, isLoading }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-xl shadow-2xl w-11/12 max-w-4xl max-h-[85vh] flex flex-col border border-gray-200">
+        
+        {/* Header de la Modale */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50 rounded-t-xl">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <FileSpreadsheet className="w-5 h-5 text-green-700" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">Aperçu du fichier</h3>
+              <p className="text-xs text-gray-500">{fileName || 'Données nettoyées'}</p>
+            </div>
+          </div>
+          <button 
+            onClick={onClose}
+            className="p-1.5 hover:bg-gray-200 rounded-full transition-colors text-gray-500"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Contenu (Tableau) */}
+        <div className="flex-1 overflow-auto p-4 custom-scrollbar">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+              <Loader className="w-8 h-8 animate-spin mb-2 text-green-600" />
+              <p className="text-sm font-medium">Chargement des données...</p>
+            </div>
+          ) : data && data.length > 0 ? (
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr>
+                  {Object.keys(data[0]).map((header) => (
+                    <th key={header} className="sticky top-0 bg-white z-10 p-2 text-xs font-bold text-gray-700 uppercase border-b-2 border-green-100 whitespace-nowrap">
+                      {header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {data.map((row, index) => (
+                  <tr key={index} className="hover:bg-green-50/30 transition-colors">
+                    {Object.values(row).map((cell, i) => (
+                      <td key={i} className="p-2 text-xs text-gray-600 border-r border-gray-50 last:border-r-0 max-w-[200px] truncate">
+                        {String(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
+              Aucune donnée à afficher pour le moment.
+            </div>
+          )}
+        </div>
+
+        {/* Footer Modale */}
+        <div className="p-3 border-t border-gray-100 bg-gray-50 rounded-b-xl flex justify-between items-center">
+          <p className="text-[10px] text-gray-400 italic">
+            * Seules les 500 premières lignes sont affichées dans l'aperçu.
+          </p>
+          <button onClick={onClose} className="px-4 py-2 text-xs font-medium bg-white border border-gray-300 rounded hover:bg-gray-50">
+            Fermer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ExportSidebar = ({ data, isLocked }) => {
   const [openSection, setOpenSection] = useState('excel'); 
   const [isProcessing, setIsProcessing] = useState(false);
   
+  // --- ETATS POUR LA PREVISUALISATION ---
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewData, setPreviewData] = useState([]);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+
   const [cleanConfig, setCleanConfig] = useState({
       removeSparse: false 
   });
@@ -37,10 +122,54 @@ const ExportSidebar = ({ data, isLocked }) => {
   const removedAutoCount = data.removed_empty_columns ? data.removed_empty_columns.length : 0;
 
   const toggleSection = (id) => {
-    // Si l'analyse est en cours, on empêche d'ouvrir/fermer
     if (isLocked) return; 
     setOpenSection(openSection === id ? null : id);
   };
+
+  // --- LOGIQUE DE PREVISUALISATION ---
+  const handlePreview = async () => {
+    if (!cleanFileId) return;
+    
+    setShowPreview(true);
+    setLoadingPreview(true);
+    
+    try {
+      // NOTE: Assurez-vous d'avoir une route backend qui renvoie un JSON (ex: df.head(50).to_json())
+      // Exemple: GET /api/v1/files/{id}/preview
+      const response = await axios.get(`${API_URL}/files/${cleanFileId}/preview`);
+      
+      // Si votre backend renvoie directement le tableau d'objets :
+      // setPreviewData(response.data); 
+      
+      // MOCK POUR L'EXEMPLE (A REMPLACER PAR VOTRE APPEL API REEL)
+      // Si vous n'avez pas encore l'API, décommentez ceci pour tester l'UI :
+      /*
+      setTimeout(() => {
+        setPreviewData([
+            { ID: 1, Nom: "Dupont", Email: "d@test.com", Statut: "Validé" },
+            { ID: 2, Nom: "Durand", Email: "a@test.com", Statut: "En attente" },
+            { ID: 3, Nom: "Martin", Email: "m@test.com", Statut: "Rejeté" },
+        ]);
+        setLoadingPreview(false);
+      }, 1000);
+      return; 
+      */
+
+      if(response.data) {
+          setPreviewData(response.data.preview || response.data); // Adaptez selon votre structure JSON
+      }
+    } catch (error) {
+      console.error("Erreur preview", error);
+      MySwal.fire({
+          toast: true, position: 'top-end', icon: 'error', 
+          title: 'Impossible de charger l\'aperçu', showConfirmButton: false, timer: 3000
+      });
+      setShowPreview(false); // Fermer si erreur
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
   // --- TÉLÉCHARGEMENT SIMPLE ---
   const handleDirectDownload = (fileId, label) => {
       if (!fileId) return;
@@ -105,7 +234,6 @@ const ExportSidebar = ({ data, isLocked }) => {
             
             {/* --- ZONE PRINCIPALE : LE FICHIER NETTOYÉ --- */}
             <div className="bg-green-50 border border-green-200 rounded-lg p-3 relative overflow-hidden">
-                {/* Badge "Recommandé" */}
                 <div className="absolute top-0 right-0 bg-green-200 text-green-800 text-[9px] font-bold px-2 py-0.5 rounded-bl-lg">
                     PRÊT À L'EMPLOI
                 </div>
@@ -115,7 +243,7 @@ const ExportSidebar = ({ data, isLocked }) => {
                     <div>
                         <h4 className="text-sm font-bold text-green-900">Version Nettoyée</h4>
                         <p className="text-[10px] text-green-700 leading-tight mt-0.5">
-                            Sans colonnes vides, doublons supprimés, types corrigés.
+                            Sans colonnes vides, doublons supprimés.
                         </p>
                         {removedAutoCount > 0 && (
                             <span className="inline-flex items-center gap-1 mt-1.5 bg-white px-1.5 py-0.5 rounded border border-green-200 text-[9px] text-green-600">
@@ -126,14 +254,28 @@ const ExportSidebar = ({ data, isLocked }) => {
                     </div>
                 </div>
 
-                <button 
-                    onClick={() => handleDirectDownload(cleanFileId, 'data_cleaned.xlsx')}
-                    disabled={isProcessing || isLocked}
-                    className="w-full flex items-center justify-center gap-2 p-2 bg-green-600 hover:bg-green-700 text-white rounded-md transition-all shadow-sm active:scale-95 group"
-                >
-                    <Download className="w-4 h-4 group-hover:animate-bounce" />
-                    <span className="text-xs font-bold">Télécharger ce fichier</span>
-                </button>
+                {/* GROUPE DE BOUTONS : PREVIEW + DOWNLOAD */}
+                <div className="flex gap-2">
+                    {/* Bouton Prévisualiser */}
+                    <button 
+                        onClick={handlePreview}
+                        disabled={isProcessing || isLocked}
+                        title="Voir un aperçu des données"
+                        className="flex items-center justify-center p-2 bg-white border border-green-300 text-green-700 rounded-md hover:bg-green-50 transition-all shadow-sm w-12 flex-shrink-0"
+                    >
+                        <Eye className="w-4 h-4" />
+                    </button>
+
+                    {/* Bouton Télécharger */}
+                    <button 
+                        onClick={() => handleDirectDownload(cleanFileId, 'data_cleaned.xlsx')}
+                        disabled={isProcessing || isLocked}
+                        className="flex-1 flex items-center justify-center gap-2 p-2 bg-green-600 hover:bg-green-700 text-white rounded-md transition-all shadow-sm active:scale-95 group"
+                    >
+                        <Download className="w-4 h-4 group-hover:animate-bounce" />
+                        <span className="text-xs font-bold">Télécharger</span>
+                    </button>
+                </div>
             </div>
 
             {/* --- ZONE SECONDAIRE : L'ORIGINAL --- */}
@@ -189,7 +331,7 @@ const ExportSidebar = ({ data, isLocked }) => {
                     ) : (
                         <>
                             <Sparkles className="w-3 h-3 text-amber-500" />
-                            <span>Générer version ultra-léagère</span>
+                            <span>Générer version ultra-légère</span>
                         </>
                     )}
                 </button>
@@ -227,69 +369,80 @@ const ExportSidebar = ({ data, isLocked }) => {
   ];
 
   return (
-    <div className="w-72 bg-white border-l border-gray-200 flex flex-col h-full shadow-xl z-20 animate-in slide-in-from-right duration-300">
-      
-      {/* Header Sidebar */}
-      <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-        <div className="flex items-center gap-2 mb-0.5">
-          <div className="p-1.5 bg-green-100 rounded-lg">
-             <Download className="w-4 h-4 text-green-700" />
-          </div>
-          <h3 className="text-sm font-bold text-gray-900">Exporter</h3>
-        </div>
-        <p className="text-[10px] text-gray-500 ml-0.5">
-          {rowCount > 0 ? `${rowCount} lignes prêtes à l'export` : 'En attente...'}
-        </p>
-      </div>
+    <>
+        {/* COMPOSANT MODALE MONTE HORS DE LA HIERARCHIE SIDEBAR */}
+        <PreviewModal 
+            isOpen={showPreview} 
+            onClose={() => setShowPreview(false)} 
+            data={previewData}
+            isLoading={loadingPreview}
+            fileName="Données Nettoyées"
+        />
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
-        {exportOptions.map((option) => {
-          const Icon = option.icon;
-          const isOpen = openSection === option.id;
-
-          return (
-            <div 
-                key={option.id} 
-                className={`border rounded-lg transition-all duration-300 overflow-hidden ${isOpen ? 'bg-white border-green-200 shadow-sm ring-1 ring-green-50' : 'bg-white border-gray-200 hover:border-gray-300'}`}
-            >
-              <button
-                onClick={() => toggleSection(option.id)}
-                className="w-full p-3 flex items-center justify-between hover:bg-gray-50/50 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <div className={`p-1.5 rounded transition-colors ${isOpen ? 'bg-opacity-20' : 'bg-gray-50'}`} style={{ backgroundColor: isOpen ? `${option.color}30` : undefined }}>
-                    <Icon className="w-4 h-4" style={{ color: isOpen ? option.color : '#9ca3af' }} />
-                  </div>
-                  <span className={`font-semibold text-xs ${isOpen ? 'text-gray-900' : 'text-gray-600'}`}>
-                    {option.name}
-                  </span>
-                </div>
-                {isOpen ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
-              </button>
-
-              <div className={`grid transition-all duration-300 ease-in-out ${isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
-                <div className="overflow-hidden">
-                    <div className="px-3 pb-3">
-                        <div className="h-px w-full bg-gray-100 mb-2"></div>
-                        {option.content}
-                    </div>
-                </div>
-              </div>
+        <div className="w-72 bg-white border-l border-gray-200 flex flex-col h-full shadow-xl z-20 animate-in slide-in-from-right duration-300">
+        
+        {/* Header Sidebar */}
+        <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+            <div className="flex items-center gap-2 mb-0.5">
+            <div className="p-1.5 bg-green-100 rounded-lg">
+                <Download className="w-4 h-4 text-green-700" />
             </div>
-          );
-        })}
-      </div>
-
-      <div className="p-3 bg-gray-50 border-t border-gray-200">
-        <div className="flex items-start gap-2">
-            <CheckCircle className="w-3 h-3 text-green-600 mt-0.5 shrink-0" />
-            <p className="text-[9px] text-gray-500 leading-relaxed">
-                Format optimisé : Les fichiers générés sont nettoyés et prêts pour l'analyse.
+            <h3 className="text-sm font-bold text-gray-900">Exporter</h3>
+            </div>
+            <p className="text-[10px] text-gray-500 ml-0.5">
+            {rowCount > 0 ? `${rowCount} lignes prêtes à l'export` : 'En attente...'}
             </p>
         </div>
-      </div>
 
-    </div>
+        <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
+            {exportOptions.map((option) => {
+            const Icon = option.icon;
+            const isOpen = openSection === option.id;
+
+            return (
+                <div 
+                    key={option.id} 
+                    className={`border rounded-lg transition-all duration-300 overflow-hidden ${isOpen ? 'bg-white border-green-200 shadow-sm ring-1 ring-green-50' : 'bg-white border-gray-200 hover:border-gray-300'}`}
+                >
+                <button
+                    onClick={() => toggleSection(option.id)}
+                    className="w-full p-3 flex items-center justify-between hover:bg-gray-50/50 transition-colors"
+                >
+                    <div className="flex items-center gap-2">
+                    <div className={`p-1.5 rounded transition-colors ${isOpen ? 'bg-opacity-20' : 'bg-gray-50'}`} style={{ backgroundColor: isOpen ? `${option.color}30` : undefined }}>
+                        <Icon className="w-4 h-4" style={{ color: isOpen ? option.color : '#9ca3af' }} />
+                    </div>
+                    <span className={`font-semibold text-xs ${isOpen ? 'text-gray-900' : 'text-gray-600'}`}>
+                        {option.name}
+                    </span>
+                    </div>
+                    {isOpen ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
+                </button>
+
+                <div className={`grid transition-all duration-300 ease-in-out ${isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                    <div className="overflow-hidden">
+                        <div className="px-3 pb-3">
+                            <div className="h-px w-full bg-gray-100 mb-2"></div>
+                            {option.content}
+                        </div>
+                    </div>
+                </div>
+                </div>
+            );
+            })}
+        </div>
+
+        <div className="p-3 bg-gray-50 border-t border-gray-200">
+            <div className="flex items-start gap-2">
+                <CheckCircle className="w-3 h-3 text-green-600 mt-0.5 shrink-0" />
+                <p className="text-[9px] text-gray-500 leading-relaxed">
+                    Format optimisé : Les fichiers générés sont nettoyés et prêts pour l'analyse.
+                </p>
+            </div>
+        </div>
+
+        </div>
+    </>
   );
 };
 

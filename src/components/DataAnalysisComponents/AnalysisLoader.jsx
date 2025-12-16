@@ -7,7 +7,7 @@ const AnalysisLoader = ({ steps }) => {
   // Vérifier si steps est un tableau valide
   if (!Array.isArray(steps) || steps.length === 0) {
     return null;
-  }
+  } 
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg p-8 space-y-6">

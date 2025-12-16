@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   BarChart3, TrendingUp, Activity, GitMerge, List,
   Database, Info, Sparkles, PieChart, Users, Target, BrainCircuit, Loader, Move3d,
-  AlertCircle, CheckCircle, TrendingDown, Zap, Filter
+  AlertCircle, CheckCircle, TrendingDown, Zap, Filter, Volume2, VolumeX, ChevronDown, ChevronUp,
+  Eye, Download, Search, X, ChevronsDown, ChevronsUp, Layout
 } from 'lucide-react';
 import Clustering3DVisualization from './Clustering3DVisualization';
 
@@ -12,12 +13,133 @@ const AnalysisResults = ({ data }) => {
   const [expandedVariable, setExpandedVariable] = useState(null);
   const [chartFilter, setChartFilter] = useState('all');
   
-  const GREEN_COLOR = '#5DA781';
-  // ✅ COULEURS CLUSTERING MODIFIÉES: ROUGE, JAUNE, VERT
-  const CLUSTER_COLORS = ['#dc2626', '#eab308', '#16a34a'];
+  // 🔧 State pour multi-clustering
+  const [activeClusteringTab, setActiveClusteringTab] = useState(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(true);
+  const [expandedExplanation, setExpandedExplanation] = useState(true);
+  
+  const ttsEngineRef = useRef(null);
+  
+  // COULEURS CLUSTERING: 8 couleurs distinctes
+  const CLUSTER_COLORS = [
+    '#dc2626', '#2563eb', '#16a34a', '#ea580c', 
+    '#7c3aed', '#0891b2', '#db2777', '#f59e0b'
+  ];
+
+  // 🔧 Initialisation TTS améliorée
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      let voicesLoaded = false;
+      
+      const loadVoices = () => {
+        const voices = window.speechSynthesis.getVoices();
+        
+        // Attendre une voix française
+        const frenchVoices = voices.filter(v => v.lang.includes('fr'));
+        
+        if (frenchVoices.length === 0) {
+          // Réessayer après un délai
+          setTimeout(() => {
+            const retryVoices = window.speechSynthesis.getVoices();
+            const frenchRetry = retryVoices.filter(v => v.lang.includes('fr'));
+            if (frenchRetry.length > 0) {
+              initTTS();
+            } else {
+              // Même sans voix française, initialiser
+              initTTS();
+            }
+          }, 500);
+          return;
+        }
+        
+        initTTS();
+      };
+      
+      const initTTS = () => {
+        voicesLoaded = true;
+        
+        ttsEngineRef.current = {
+          speak: (text) => {
+            if (!ttsEnabled || isSpeaking) return;
+            
+            window.speechSynthesis.cancel();
+            setIsSpeaking(true);
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'fr-FR';
+            utterance.rate = 1.0;
+            utterance.volume = 1.0;
+            
+            const voices = window.speechSynthesis.getVoices();
+            const frenchVoice = voices.find(v => v.lang.includes('fr'));
+            if (frenchVoice) utterance.voice = frenchVoice;
+            
+            utterance.onend = () => {
+              setIsSpeaking(false);
+            };
+            
+            utterance.onerror = () => {
+              setIsSpeaking(false);
+            };
+            
+            // Délai pour éviter les conflits
+            setTimeout(() => {
+              try {
+                window.speechSynthesis.speak(utterance);
+              } catch (error) {
+                console.error('Erreur de lecture:', error);
+                setIsSpeaking(false);
+              }
+            }, 100);
+          },
+          stop: () => {
+            window.speechSynthesis.cancel();
+            setIsSpeaking(false);
+          }
+        };
+        
+        // 🔥 TTS AUTOMATIQUE au chargement
+        if (activeTab === 'clustering' && ttsEnabled) {
+          setTimeout(() => {
+            const explanation = getActiveClusteringExplanation();
+            if (explanation && explanation.tts_text && ttsEngineRef.current) {
+              ttsEngineRef.current.speak(explanation.tts_text);
+            }
+          }, 1000);
+        }
+      };
+      
+      // Charger les voix
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+      loadVoices(); // Appel immédiat
+      
+      return () => {
+        if (ttsEngineRef.current) {
+          ttsEngineRef.current.stop();
+        }
+      };
+    }
+  }, [ttsEnabled]);
+  
+  // 🔧 TTS automatique quand on change d'onglet clustering
+  useEffect(() => {
+    if (activeTab === 'clustering' && activeClusteringTab && ttsEngineRef.current && ttsEnabled && !isSpeaking) {
+      const timer = setTimeout(() => {
+        const clusteringExplanation = getActiveClusteringExplanation();
+        if (clusteringExplanation && clusteringExplanation.tts_text) {
+          ttsEngineRef.current.speak(clusteringExplanation.tts_text);
+        }
+      }, 800);
+      
+      return () => {
+        clearTimeout(timer);
+      };
+    }
+  }, [activeTab, activeClusteringTab, ttsEnabled, isSpeaking]);
 
   // Protection critique
-  if (!data || !data.summary_stats) {
+  if (!data || (!data.summary_stats && !data.metrics)) {
     return (
       <div className="p-12 text-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">
         <Loader className="w-10 h-10 text-green-600 animate-spin mx-auto mb-4" />
@@ -26,15 +148,43 @@ const AnalysisResults = ({ data }) => {
     );
   }
 
-  // Extraction sécurisée
-  const summary = data.summary_stats || {};
-  const eda = summary.eda_metrics || summary.eda || {};
-  const charts = summary.charts || { distributions: {}, pies: [], scatters: [] };
-  const insights = data.insights || [];
-  const totalRows = summary.rows_final || summary.rows_original || 0;
-  const totalCols = summary.cols_features || summary.cols_original || 0;
-  const targetVariable = summary.target || summary.auto_target || "Non détectée";
+  // 🔧 EXTRACTION SÉCURISÉE
+  const summary = data.summary_stats || data.metrics || {};
+  const eda = summary.eda_metrics || summary.eda || summary || {};
+  const charts = summary.charts || eda.charts_data || { distributions: {}, pies: [], scatters: [] };
+  const insights = data.insights || data.ai_insights || [];
+  const totalRows = summary.rows_final || summary.total_rows || summary.rows_original || 0;
+  const totalCols = summary.cols_features || summary.total_cols || summary.cols_original || 0;
+  const targetVariable = summary.target || eda.auto_target || "Non détectée";
   const analysisType = data.analysis_type || "Exploratoire";
+
+  // 🔧 Récupérer les explications de clustering
+  const clusteringExplanations = charts.clustering_explanations || {};
+  
+  const getActiveClusteringExplanation = () => {
+    if (activeClusteringTab && clusteringExplanations[activeClusteringTab]) {
+      return clusteringExplanations[activeClusteringTab];
+    }
+    
+    // Fallback aux explications générales
+    const tabExplanations = data.tab_explanations || {};
+    return tabExplanations['clustering'] || {
+      title: "Segmentation Intelligente",
+      summary: "Analyse de clustering pour identifier des groupes naturels dans les données.",
+      recommendation: "Utilisez la visualisation 3D pour explorer la distribution spatiale des groupes.",
+      tts_text: "L'analyse de clustering a identifié des groupes dans vos données. La visualisation 3D montre la répartition spatiale. Examinez les caractéristiques de chaque groupe."
+    };
+  };
+
+  // 🔧 INIT activeClusteringTab avec première clé disponible
+  useEffect(() => {
+    if (activeClusteringTab === null && eda.multi_clustering?.clusterings) {
+      const keys = Object.keys(eda.multi_clustering.clusterings);
+      if (keys.length > 0) {
+        setActiveClusteringTab(keys[0]);
+      }
+    }
+  }, [eda.multi_clustering?.clusterings, activeClusteringTab]);
 
   const clusterInsights = insights.filter(i => 
     (i.title && i.title.toLowerCase().includes('segment')) ||
@@ -369,7 +519,8 @@ const AnalysisResults = ({ data }) => {
   const EnhancedPieChart = ({ data, title }) => {
     const total = data.reduce((sum, item) => sum + item.value, 0);
     let cumulative = 0;
-    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+    const colors = ['#dc2626', '#2563eb', '#16a34a', '#ea580c', 
+      '#7c3aed', '#0891b2', '#db2777', '#b91c1c'];
 
     const gradient = data.map((item, i) => {
       const start = cumulative;
@@ -592,6 +743,24 @@ const AnalysisResults = ({ data }) => {
         </table>
       </div>
     );
+  };
+
+  const toggleTTS = () => {
+    setTtsEnabled(!ttsEnabled);
+    if (ttsEngineRef.current && !ttsEnabled) {
+      ttsEngineRef.current.stop();
+    }
+  };
+
+  const speakClusteringExplanation = () => {
+    if (ttsEngineRef.current) {
+      const explanation = getActiveClusteringExplanation();
+      if (explanation.tts_text) {
+        ttsEngineRef.current.speak(explanation.tts_text);
+      } else if (explanation.summary) {
+        ttsEngineRef.current.speak(explanation.summary + " " + explanation.recommendation);
+      }
+    }
   };
 
   return (
@@ -904,57 +1073,326 @@ const AnalysisResults = ({ data }) => {
         )}
 
         {activeTab === 'clustering' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[500px]">
-            
-            <div className="lg:col-span-2 h-full rounded-2xl shadow-lg overflow-hidden border border-gray-800">
-              <Clustering3DVisualization 
-                scatterPoints={eda.clustering?.scatter_points || []}
-                dna={eda.clustering?.dna || {}}
-                colors={CLUSTER_COLORS}
-              />
-            </div>
-
-            <div className="space-y-4 overflow-y-auto pr-2">
-              {eda.clustering?.dna ? (
-                Object.entries(eda.clustering.dna).map(([name, data], i) => (
-                  <div key={i} className="bg-white border border-gray-200 p-4 rounded-xl shadow-sm hover:shadow-md transition-all">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div
-                        className="w-3 h-3 rounded-full shadow-sm"
-                        style={{ backgroundColor: CLUSTER_COLORS[i % 3] }}
-                      ></div>
-                      <h5 className="text-xs font-bold text-gray-900">{name}</h5>
-                      <span className="ml-auto text-[9px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
-                        n={data.size}
-                      </span>
+          <div className="space-y-6">
+            {/* 🔧 EN-TÊTE AVEC EXPLICATION ET CONTRÔLES TTS */}
+            <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-xl p-5 shadow-sm">
+              <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-2 bg-purple-100 rounded-lg">
+                      <Users className="w-5 h-5 text-purple-600" />
                     </div>
-                    <div className="space-y-1.5 text-[9px]">
-                      {Object.entries(data.features || {})
-                        .slice(0, 3)
-                        .map(([feat, info]) => (
-                          <div key={feat} className="bg-gray-50 p-1.5 rounded border border-gray-100">
-                            <p className="font-bold text-gray-800">{feat}</p>
-                            <p className="text-gray-600">
-                              {info.direction} · Score: {info.z_score}
-                            </p>
-                          </div>
-                        ))}
+                    <div>
+                      <h3 className="text-lg font-bold text-purple-900">Segmentation Intelligente</h3>
+                      <p className="text-xs text-purple-700">
+                        Analyse de clustering {eda.multi_clustering?.n_clustering_types || 0} modèles
+                        {eda.multi_clustering?.total_points && ` • ${eda.multi_clustering.total_points.toLocaleString()} points`}
+                      </p>
                     </div>
                   </div>
-                ))
-              ) : (
-                <div className="text-center p-4 text-gray-500 text-sm">
-                  Clustering non disponible
+                  
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <button
+                        onClick={() => setExpandedExplanation(!expandedExplanation)}
+                        className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold bg-white border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-50 transition-all"
+                      >
+                        {expandedExplanation ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                        {expandedExplanation ? "Masquer l'explication" : "Afficher l'explication"}
+                      </button>
+                      
+                      <button
+                        onClick={toggleTTS}
+                        className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${
+                          ttsEnabled
+                            ? 'bg-green-100 border-green-300 text-green-700 hover:bg-green-50'
+                            : 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        {ttsEnabled ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />}
+                        {ttsEnabled ? "Voix ON" : "Voix OFF"}
+                      </button>
+                      
+                      {ttsEnabled && (
+                        <button
+                          onClick={speakClusteringExplanation}
+                          disabled={isSpeaking}
+                          className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${
+                            isSpeaking
+                              ? 'bg-red-100 border-red-300 text-red-700 hover:bg-red-50'
+                              : 'bg-blue-100 border-blue-300 text-blue-700 hover:bg-blue-50'
+                          }`}
+                        >
+                          {isSpeaking ? (
+                            <>
+                              <Loader className="w-3 h-3 animate-spin" />
+                              Arrêter
+                            </>
+                          ) : (
+                            <>
+                              <Volume2 className="w-3 h-3" />
+                              Écouter l'explication
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                    
+                    {expandedExplanation && (
+                      <div className="bg-white/80 backdrop-blur-sm p-4 rounded-lg border border-purple-100 animate-in fade-in duration-300">
+                        <div className="flex items-start gap-3 mb-3">
+                          <Info className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-bold text-gray-900">
+                              {getActiveClusteringExplanation().title}
+                            </h4>
+                            <p className="text-xs text-gray-700 leading-relaxed">
+                              {getActiveClusteringExplanation().summary}
+                            </p>
+                            <div className="bg-purple-50 p-3 rounded border border-purple-100">
+                              <p className="text-xs font-bold text-purple-800 mb-1">🎯 Recommandation :</p>
+                              <p className="text-xs text-purple-700">
+                                {getActiveClusteringExplanation().recommendation}
+                              </p>
+                            </div>
+                            
+                            {/* Détails supplémentaires */}
+                            {getActiveClusteringExplanation().details && (
+                              <div className="grid grid-cols-2 gap-2 mt-3">
+                                {Object.entries(getActiveClusteringExplanation().details).map(([key, value]) => (
+                                  <div key={key} className="bg-white p-2 rounded border border-gray-200">
+                                    <p className="text-[10px] font-bold text-gray-500 uppercase">{key}</p>
+                                    <p className="text-xs font-semibold text-gray-800">
+                                      {Array.isArray(value) ? value.join(', ') : String(value)}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
+                
+                {/* Stats rapides */}
+                <div className="bg-white p-4 rounded-lg border border-purple-200 shadow-sm">
+                  <div className="space-y-2">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-purple-600">
+                        {eda.multi_clustering?.n_clustering_types || 0}
+                      </p>
+                      <p className="text-[10px] text-purple-800 font-bold">Modèles</p>
+                    </div>
+                    <div className="h-px bg-purple-100"></div>
+                    <div className="text-center">
+                      <p className="text-lg font-bold text-gray-800">
+                        {activeClusteringTab && eda.multi_clustering?.clusterings[activeClusteringTab]?.total_points?.toLocaleString() || '0'}
+                      </p>
+                      <p className="text-[10px] text-gray-600 font-bold">Points visibles</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
+
+            {/* 🔧 TABS POUR SÉLECTIONNER LA SEGMENTATION */}
+            {eda.multi_clustering?.clusterings && Object.keys(eda.multi_clustering.clusterings).length > 0 ? (
+              <>
+                <div className="flex gap-2 border-b border-gray-200 pb-3 overflow-x-auto mb-4 flex-wrap">
+                  {Object.entries(eda.multi_clustering.clusterings).map(([key, clust]) => (
+                    <button
+                      key={key}
+                      onClick={() => setActiveClusteringTab(key)}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-bold whitespace-nowrap rounded-t-lg transition-all border-b-2 ${
+                        activeClusteringTab === key
+                          ? 'bg-blue-100 text-blue-700 border-blue-600'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border-transparent'
+                      }`}
+                      title={`${clust.name} avec ${clust.n_clusters} groupes`}
+                    >
+                      <Users className="w-4 h-4" />
+                      {clust.name}
+                      <span className="text-xs ml-1 opacity-75">(k={clust.n_clusters})</span>
+                      {clust.silhouette_score && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">
+                          {clust.silhouette_score.toFixed(2)}
+                        </span>
+                      )}
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-50 text-green-600 border border-green-200">
+                        {clust.total_points?.toLocaleString() || '0'} pts
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* AFFICHAGE DE LA SEGMENTATION SÉLECTIONNÉE */}
+                {activeClusteringTab && eda.multi_clustering.clusterings[activeClusteringTab] && (
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* VISUALISATION 3D - 2/3 de largeur */}
+                    <div className="lg:col-span-2 h-[500px] rounded-2xl shadow-lg overflow-hidden border border-gray-800">
+                      <Clustering3DVisualization 
+                        scatterPoints={eda.multi_clustering.clusterings[activeClusteringTab].scatter_points || []}
+                        dna={eda.multi_clustering.clusterings[activeClusteringTab].dna || {}}
+                        colors={CLUSTER_COLORS}
+                        silhouetteScore={eda.multi_clustering.clusterings[activeClusteringTab].silhouette_score}
+                        methodUsed={eda.multi_clustering.clusterings[activeClusteringTab].method_used}
+                        quality3D={eda.multi_clustering.clusterings[activeClusteringTab].quality_3d}
+                      />
+                    </div>
+
+                    {/* PROFILS DES GROUPES - 1/3 de largeur */}
+                    <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
+                      <div className="bg-white border border-gray-200 p-4 rounded-xl shadow-sm">
+                        <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                          <Target className="w-4 h-4 text-blue-600" />
+                          Profils des Groupes
+                          <span className="text-xs text-gray-500 ml-auto">
+                            {eda.multi_clustering.clusterings[activeClusteringTab].cluster_distribution?.length || 0} groupes
+                          </span>
+                        </h4>
+                        
+                        <div className="space-y-3">
+                          {eda.multi_clustering.clusterings[activeClusteringTab].cluster_distribution?.map((dist, i) => {
+                            const clusterData = eda.multi_clustering.clusterings[activeClusteringTab].dna?.[`Groupe ${i+1}`];
+                            return (
+                              <div key={i} className="bg-gray-50 border border-gray-200 p-3 rounded-lg hover:shadow-md transition-all">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <div
+                                    className="w-3 h-3 rounded-full shadow-sm"
+                                    style={{ backgroundColor: CLUSTER_COLORS[i % CLUSTER_COLORS.length] }}
+                                  />
+                                  <h5 className="text-xs font-bold text-gray-900 flex-1">Groupe {i+1}</h5>
+                                  <span className="text-[10px] bg-white px-2 py-0.5 rounded-full border border-gray-300 text-gray-700">
+                                    {dist.percentage}% • {dist.count.toLocaleString()} pts
+                                  </span>
+                                </div>
+                                
+                                {clusterData && clusterData.features && Object.keys(clusterData.features).length > 0 ? (
+                                  <div className="space-y-1.5 text-[10px]">
+                                    <p className="font-semibold text-gray-700">Caractéristiques distinctives :</p>
+                                    {Object.entries(clusterData.features)
+                                      .slice(0, 3)
+                                      .map(([feat, info]) => (
+                                        <div key={feat} className="bg-white p-2 rounded border border-gray-100">
+                                          <div className="flex justify-between items-center">
+                                            <span className="font-bold text-gray-800 truncate">{feat}</span>
+                                            <span className={`text-[9px] px-1.5 py-0.5 rounded ${
+                                              info.direction.includes('↑')
+                                                ? 'bg-green-100 text-green-800'
+                                                : 'bg-red-100 text-red-800'
+                                            }`}>
+                                              {info.z_score > 0 ? '+' : ''}{info.z_score}
+                                            </span>
+                                          </div>
+                                          <p className="text-gray-600 mt-0.5">{info.interpretation}</p>
+                                        </div>
+                                      ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-gray-500 italic text-center py-2">
+                                    Caractéristiques en cours d'analyse...
+                                  </p>
+                                )}
+                                
+                                {clusterData?.distinctiveness && (
+                                  <div className="mt-2 pt-2 border-t border-gray-200">
+                                    <div className="flex justify-between text-[9px]">
+                                      <span className="text-gray-600">Distinctivité :</span>
+                                      <span className="font-bold text-blue-600">
+                                        {clusterData.distinctiveness > 0.5 ? 'Élevée' : 
+                                         clusterData.distinctiveness > 0.3 ? 'Moyenne' : 'Faible'}
+                                      </span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                                      <div 
+                                        className="bg-blue-500 h-1.5 rounded-full"
+                                        style={{ width: `${Math.min(clusterData.distinctiveness * 100, 100)}%` }}
+                                      ></div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      
+                      {/* QUALITÉ DU CLUSTERING */}
+                      {eda.multi_clustering.clusterings[activeClusteringTab].silhouette_score && (
+                        <div className="bg-white border border-gray-200 p-4 rounded-xl shadow-sm">
+                          <h4 className="text-sm font-bold text-gray-900 mb-3">Qualité de la Segmentation</h4>
+                          <div className="space-y-3">
+                            <div>
+                              <div className="flex justify-between text-xs mb-1">
+                                <span className="text-gray-600">Score de Silhouette</span>
+                                <span className="font-bold text-blue-600">
+                                  {eda.multi_clustering.clusterings[activeClusteringTab].silhouette_score.toFixed(3)}
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div 
+                                  className={`h-2 rounded-full ${
+                                    eda.multi_clustering.clusterings[activeClusteringTab].silhouette_score > 0.5 ? 'bg-green-500' :
+                                    eda.multi_clustering.clusterings[activeClusteringTab].silhouette_score > 0.3 ? 'bg-yellow-500' :
+                                    'bg-red-500'
+                                  }`}
+                                  style={{ 
+                                    width: `${Math.min(
+                                      eda.multi_clustering.clusterings[activeClusteringTab].silhouette_score * 100, 
+                                      100
+                                    )}%` 
+                                  }}
+                                ></div>
+                              </div>
+                              <p className="text-[10px] text-gray-500 mt-1">
+                                {eda.multi_clustering.clusterings[activeClusteringTab].silhouette_score > 0.5 ? 
+                                  'Structure forte • Clusters bien séparés' :
+                                  eda.multi_clustering.clusterings[activeClusteringTab].silhouette_score > 0.3 ?
+                                  'Structure moyenne • Séparation acceptable' :
+                                  'Structure faible • Chevauchement possible'
+                                }
+                              </p>
+                            </div>
+                            
+                            {/* Informations sur les points */}
+                            <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                              <div className="flex items-center gap-2 mb-1">
+                                <Info className="w-3 h-3 text-blue-600" />
+                                <span className="text-xs font-bold text-blue-800">Points 3D</span>
+                              </div>
+                              <p className="text-[10px] text-blue-700">
+                                Tous les {eda.multi_clustering.clusterings[activeClusteringTab].total_points?.toLocaleString() || '0'} points sont visibles en 3D.
+                                {eda.multi_clustering.clusterings[activeClusteringTab].total_points > 5000 && 
+                                  ' Utilisation du mode optimisé pour grands ensembles.'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center p-8 border-2 border-dashed border-gray-200 rounded-lg">
+                <AlertCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                <p className="text-sm text-gray-600">Segmentation non disponible</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Les données ne permettent pas de générer des clusters distincts.
+                  Essayez avec plus de variables ou des données plus structurées.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
         {activeTab === 'corr' && (
           <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
             <h3 className="text-sm font-bold text-gray-900 mb-4">Matrice de Corrélation de Pearson</h3>
-            <CorrelationHeatmap matrix={eda.correlation || {}} />
+            {/* 🔧 FIXED: Utiliser la bonne clé pour corrélations */}
+            <CorrelationHeatmap matrix={eda.correlations?.matrix || eda.correlation || {}} />
           </div>
         )}
       </div>

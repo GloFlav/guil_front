@@ -5,7 +5,7 @@ const DataUploadSection = ({ onFileUpload, uploadedFile, onClear }) => {
   const fileInputRef = useRef(null);
   const dropZoneRef = useRef(null);
 
-  const GREEN_COLOR = '#5DA781';
+  const GREEN_COLOR = '#5DA781'; 
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
