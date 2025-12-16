@@ -35,7 +35,6 @@ const Clustering3DVisualization = ({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showInfo, setShowInfo] = useState(false);
-  const [renderMode, setRenderMode] = useState('instanced'); // 'instanced' ou 'points'
 
   // Calcul de la qualité 3D locale
   const calculate3DQuality = (points) => {
@@ -115,11 +114,6 @@ const Clustering3DVisualization = ({
     };
   }, [pointsToRender]);
 
-  // Optimisation pour grand nombre de points
-  const shouldUsePoints = useMemo(() => {
-    return pointsToRender.length > 5000; // Utiliser Points au lieu de Mesh pour > 5000 points
-  }, [pointsToRender.length]);
-
   // --- 2. UTILITAIRES ---
   const createTextLabel = (text, position, color = 'white', size = 28) => {
     const canvas = document.createElement('canvas');
@@ -189,7 +183,7 @@ const Clustering3DVisualization = ({
       scene.background = new THREE.Color(0x111827); // gray-900
       sceneRef.current = scene;
 
-      // CAMERA - ajustée pour grand nombre de points
+      // CAMERA
       const camera = new THREE.PerspectiveCamera(55, width / height, 0.1, 1000);
       camera.position.set(35, 25, 45);
       camera.lookAt(0, 0, 0);
@@ -253,121 +247,82 @@ const Clustering3DVisualization = ({
       scene.add(grid);
 
       // --- POINTS 3D ---
-      const pointCount = pointsToRender.length;
-      logger.info(`📊 Rendu de ${pointCount} points 3D...`);
+      const sphereGeometry = new THREE.SphereGeometry(0.8, 24, 24);
       
-      if (shouldUsePoints) {
-        // Utiliser Points pour grand nombre de points (plus performant)
-        const positions = new Float32Array(pointCount * 3);
-        const colorsArray = new Float32Array(pointCount * 3);
-        
-        pointsToRender.forEach((p, i) => {
-          const colorValue = colors[p.cluster % colors.length] || colors[0];
-          const color = new THREE.Color(colorValue);
-          
-          positions[i * 3] = p.x * 0.9;
-          positions[i * 3 + 1] = p.y * 0.9;
-          positions[i * 3 + 2] = p.z * 0.9;
-          
-          colorsArray[i * 3] = color.r;
-          colorsArray[i * 3 + 1] = color.g;
-          colorsArray[i * 3 + 2] = color.b;
-        });
-        
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geometry.setAttribute('color', new THREE.BufferAttribute(colorsArray, 3));
-        
-        const material = new THREE.PointsMaterial({
-          size: 1.5,
-          vertexColors: true,
-          transparent: true,
-          opacity: 0.8
-        });
-        
-        const points = new THREE.Points(geometry, material);
-        scene.add(points);
-        
-        logger.info(`✅ Points créés: ${pointCount}`);
-      } else {
-        // Utiliser InstancedMesh pour performance moyenne
-        const sphereGeometry = new THREE.SphereGeometry(0.8, 16, 16);
-        
-        // Grouper les points par cluster
-        const clusterGroups = {};
-        const dummy = new THREE.Object3D();
+      // Grouper les points par cluster
+      const clusterGroups = {};
+      const dummy = new THREE.Object3D();
 
-        pointsToRender.forEach(p => {
-          const cId = Math.max(0, p.cluster) % colors.length;
-          if (!clusterGroups[cId]) clusterGroups[cId] = [];
-          
-          dummy.position.set(
-            p.x * 0.9,
-            p.y * 0.9,
-            p.z * 0.9
-          );
-          dummy.updateMatrix();
-          clusterGroups[cId].push(dummy.matrix.clone());
-        });
+      pointsToRender.forEach(p => {
+        const cId = Math.max(0, p.cluster) % colors.length;
+        if (!clusterGroups[cId]) clusterGroups[cId] = [];
+        
+        // Position avec léger scaling
+        dummy.position.set(
+          p.x * 0.9,
+          p.y * 0.9,
+          p.z * 0.9
+        );
+        dummy.updateMatrix();
+        clusterGroups[cId].push(dummy.matrix.clone());
+      });
 
-        // Créer un InstancedMesh par cluster
-        Object.keys(clusterGroups).forEach(cId => {
-          const matrices = clusterGroups[cId];
-          if (matrices.length === 0) return;
-          
-          const colorValue = colors[cId] || colors[0];
-          const color = new THREE.Color(colorValue);
-          
-          const material = new THREE.MeshPhysicalMaterial({ 
-            color: color,
-            emissive: color,
-            emissiveIntensity: localQuality3D < 0.2 ? 0.8 : 1.5,
-            roughness: 0.2,
-            metalness: 0.1,
-            clearcoat: 0.8,
-            clearcoatRoughness: 0.2
-          });
-          
-          const mesh = new THREE.InstancedMesh(sphereGeometry, material, matrices.length);
-          matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
-          mesh.instanceMatrix.needsUpdate = true;
-          
-          scene.add(mesh);
+      // Créer un InstancedMesh par cluster
+      Object.keys(clusterGroups).forEach(cId => {
+        const matrices = clusterGroups[cId];
+        if (matrices.length === 0) return;
+        
+        const colorValue = colors[cId] || colors[0];
+        const color = new THREE.Color(colorValue);
+        
+        // Matériau avec émission pour meilleure visibilité
+        const material = new THREE.MeshPhysicalMaterial({ 
+          color: color,
+          emissive: color,
+          emissiveIntensity: localQuality3D < 0.2 ? 0.8 : 1.5,
+          roughness: 0.2,
+          metalness: 0.1,
+          clearcoat: 0.8,
+          clearcoatRoughness: 0.2
         });
         
-        logger.info(`✅ InstancedMesh créé avec ${Object.keys(clusterGroups).length} clusters`);
-      }
+        const mesh = new THREE.InstancedMesh(sphereGeometry, material, matrices.length);
+        matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
+        mesh.instanceMatrix.needsUpdate = true;
+        
+        scene.add(mesh);
+      });
 
-      // --- LABELS DES CLUSTERS ---
-      // (optionnel, peut être lourd si beaucoup de points)
-      if (pointsToRender.length <= 1000) {
-        Object.keys(clusterStats.sizes).forEach(cId => {
-          const clusterPoints = pointsToRender.filter(p => p.cluster == cId);
-          if (clusterPoints.length < 5) return;
-          
-          // Calculer le centre
-          let sumX = 0, sumY = 0, sumZ = 0;
-          clusterPoints.forEach(p => {
-            sumX += p.x;
-            sumY += p.y;
-            sumZ += p.z;
-          });
-          
-          const centerPos = new THREE.Vector3(
-            sumX / clusterPoints.length,
-            sumY / clusterPoints.length + 3,
-            sumZ / clusterPoints.length
-          );
-          
-          const label = createTextLabel(
-            `G${parseInt(cId) + 1}`, 
-            centerPos, 
-            colors[cId % colors.length] || '#ffffff',
-            24
-          );
-          scene.add(label);
+      // --- LABELS DES CLUSTERS (optionnel, au centre de chaque groupe) ---
+      Object.keys(clusterGroups).forEach(cId => {
+        const matrices = clusterGroups[cId];
+        if (matrices.length < 5) return;
+        
+        // Calculer le centre du cluster
+        let sumX = 0, sumY = 0, sumZ = 0;
+        const tempPos = new THREE.Vector3();
+        
+        matrices.forEach(m => {
+          tempPos.setFromMatrixPosition(m);
+          sumX += tempPos.x;
+          sumY += tempPos.y;
+          sumZ += tempPos.z;
         });
-      }
+        
+        const centerPos = new THREE.Vector3(
+          sumX / matrices.length,
+          sumY / matrices.length + 3, // Légèrement au-dessus
+          sumZ / matrices.length
+        );
+        
+        const label = createTextLabel(
+          `G${parseInt(cId) + 1}`, 
+          centerPos, 
+          colors[cId] || '#ffffff',
+          24
+        );
+        scene.add(label);
+      });
 
       // --- INTERACTION ---
       let isDragging = false;
@@ -483,7 +438,7 @@ const Clustering3DVisualization = ({
       setError(e.message);
       setIsLoading(false);
     }
-  }, [pointsToRender, colors, localQuality3D, shouldUsePoints]);
+  }, [pointsToRender, colors, localQuality3D]);
 
   // --- REDIMENSIONNEMENT ---
   useEffect(() => {
@@ -577,11 +532,6 @@ const Clustering3DVisualization = ({
             📊 Projection 3D limitée
           </div>
         )}
-
-        {/* Indicateur de nombre de points */}
-        <div className="bg-green-900/80 backdrop-blur-sm text-green-100 px-3 py-1.5 rounded-full border border-green-700 text-[11px] shadow-lg">
-          📈 {pointsToRender.length.toLocaleString()} points
-        </div>
       </div>
 
       {/* Chargement */}
@@ -589,7 +539,7 @@ const Clustering3DVisualization = ({
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 z-20">
           <Loader className="w-10 h-10 text-blue-500 animate-spin mb-3" />
           <p className="text-blue-400 text-sm font-medium animate-pulse">
-            Construction de l'espace 3D avec {pointsToRender.length.toLocaleString()} points...
+            Construction de l'espace 3D...
           </p>
         </div>
       )}
@@ -651,7 +601,7 @@ const Clustering3DVisualization = ({
         <div className="absolute top-4 right-16 bg-gray-800/95 backdrop-blur-md text-white p-4 rounded-lg border border-gray-600 shadow-xl max-w-xs z-30">
           <h4 className="font-semibold text-sm mb-2 text-blue-400">Informations</h4>
           <div className="space-y-1.5 text-xs text-gray-300">
-            <p><span className="text-gray-400">Points:</span> {pointsToRender.length.toLocaleString()}</p>
+            <p><span className="text-gray-400">Points:</span> {pointsToRender.length}</p>
             <p><span className="text-gray-400">Clusters:</span> {clusterStats.count}</p>
             {silhouetteScore !== null && (
               <p><span className="text-gray-400">Silhouette:</span> {silhouetteScore.toFixed(3)}</p>
@@ -660,7 +610,6 @@ const Clustering3DVisualization = ({
               <p><span className="text-gray-400">Méthode:</span> {methodUsed}</p>
             )}
             <p><span className="text-gray-400">Qualité 3D:</span> {(localQuality3D * 100).toFixed(0)}%</p>
-            <p><span className="text-gray-400">Rendu:</span> {shouldUsePoints ? 'Points (optimisé)' : 'Mesh'}</p>
           </div>
           <div className="mt-3 pt-2 border-t border-gray-700">
             <p className="text-[10px] text-gray-500">
@@ -682,7 +631,7 @@ const Clustering3DVisualization = ({
                 className="w-3 h-3 rounded-full shadow-inner" 
                 style={{ backgroundColor: colors[clusterId % colors.length] }}
               />
-              <span>G{parseInt(clusterId) + 1}: {count.toLocaleString()}</span>
+              <span>G{parseInt(clusterId) + 1}: {count}</span>
             </div>
           ))}
         </div>
@@ -693,7 +642,7 @@ const Clustering3DVisualization = ({
         <div className="bg-black/50 backdrop-blur-md text-white/90 px-3 py-2 rounded-lg border border-white/10 text-[11px] shadow-lg flex items-center gap-3">
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-            <span>{pointsToRender.length.toLocaleString()} points</span>
+            <span>{pointsToRender.length} points</span>
           </div>
           <span className="text-gray-500">|</span>
           <span>{clusterStats.count} groupes</span>

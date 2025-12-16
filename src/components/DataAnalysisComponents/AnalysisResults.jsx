@@ -3,7 +3,7 @@ import {
   BarChart3, TrendingUp, Activity, GitMerge, List,
   Database, Info, Sparkles, PieChart, Users, Target, BrainCircuit, Loader, Move3d,
   AlertCircle, CheckCircle, TrendingDown, Zap, Filter, Volume2, VolumeX, ChevronDown, ChevronUp,
-  Eye, Download, Search, X, ChevronsDown, ChevronsUp, Layout
+  Eye, Download, Search, X, ChevronsDown, ChevronsUp, Layout, AlertTriangle
 } from 'lucide-react';
 import Clustering3DVisualization from './Clustering3DVisualization';
 
@@ -27,63 +27,66 @@ const AnalysisResults = ({ data }) => {
     '#7c3aed', '#0891b2', '#db2777', '#f59e0b'
   ];
 
-  // 🔧 Initialisation TTS améliorée
+  // 🔧 Initialisation TTS
   useEffect(() => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       let voicesLoaded = false;
       
       const loadVoices = () => {
+        if (voicesLoaded) return;
         const voices = window.speechSynthesis.getVoices();
-        
-        // Attendre une voix française
-        const frenchVoices = voices.filter(v => v.lang.includes('fr'));
-        
-        if (frenchVoices.length === 0) {
-          // Réessayer après un délai
-          setTimeout(() => {
-            const retryVoices = window.speechSynthesis.getVoices();
-            const frenchRetry = retryVoices.filter(v => v.lang.includes('fr'));
-            if (frenchRetry.length > 0) {
-              initTTS();
-            } else {
-              // Même sans voix française, initialiser
-              initTTS();
-            }
-          }, 500);
-          return;
-        }
-        
-        initTTS();
-      };
-      
-      const initTTS = () => {
         voicesLoaded = true;
         
         ttsEngineRef.current = {
           speak: (text) => {
-            if (!ttsEnabled || isSpeaking) return;
+            if (!ttsEnabled) return;
             
             window.speechSynthesis.cancel();
             setIsSpeaking(true);
             
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'fr-FR';
-            utterance.rate = 1.0;
-            utterance.volume = 1.0;
+            utterance.rate = 1.0; // Débit normal (était 0.9)
+            utterance.pitch = 1.0; // Hauteur normale (était 1.0)
+            utterance.volume = 0.8; // Volume légèrement réduit
             
+            // Trouver la meilleure voix française
             const voices = window.speechSynthesis.getVoices();
-            const frenchVoice = voices.find(v => v.lang.includes('fr'));
-            if (frenchVoice) utterance.voice = frenchVoice;
+            
+            // Préférence pour les voix naturelles
+            const frenchVoices = voices.filter(v => 
+              v.lang.includes('fr') && 
+              !v.name.includes('Microsoft') && 
+              !v.name.includes('Google')
+            );
+            
+            if (frenchVoices.length > 0) {
+              // Préférer les voix féminines naturelles
+              const preferredVoice = frenchVoices.find(v => 
+                v.name.includes('Virginie') || 
+                v.name.includes('Audrey') ||
+                v.name.includes('French') ||
+                v.name.includes('fr-FR')
+              );
+              
+              utterance.voice = preferredVoice || frenchVoices[0];
+            }
+            
+            // Gestion des événements
+            utterance.onstart = () => setIsSpeaking(true);
             
             utterance.onend = () => {
               setIsSpeaking(false);
+              // Petit délai avant de pouvoir relancer
+              setTimeout(() => setIsSpeaking(false), 500);
             };
             
-            utterance.onerror = () => {
+            utterance.onerror = (event) => {
+              console.warn('Erreur TTS:', event);
               setIsSpeaking(false);
             };
             
-            // Délai pour éviter les conflits
+            // 🎯 TECHNIQUE ANTI-TREMBLEMENT : Attendre que l'API soit prête
             setTimeout(() => {
               try {
                 window.speechSynthesis.speak(utterance);
@@ -91,23 +94,13 @@ const AnalysisResults = ({ data }) => {
                 console.error('Erreur de lecture:', error);
                 setIsSpeaking(false);
               }
-            }, 100);
+            }, 50);
           },
           stop: () => {
             window.speechSynthesis.cancel();
             setIsSpeaking(false);
           }
         };
-        
-        // 🔥 TTS AUTOMATIQUE au chargement
-        if (activeTab === 'clustering' && ttsEnabled) {
-          setTimeout(() => {
-            const explanation = getActiveClusteringExplanation();
-            if (explanation && explanation.tts_text && ttsEngineRef.current) {
-              ttsEngineRef.current.speak(explanation.tts_text);
-            }
-          }, 1000);
-        }
       };
       
       // Charger les voix
@@ -118,25 +111,31 @@ const AnalysisResults = ({ data }) => {
         if (ttsEngineRef.current) {
           ttsEngineRef.current.stop();
         }
+        voicesLoaded = false;
       };
     }
   }, [ttsEnabled]);
-  
   // 🔧 TTS automatique quand on change d'onglet clustering
   useEffect(() => {
-    if (activeTab === 'clustering' && activeClusteringTab && ttsEngineRef.current && ttsEnabled && !isSpeaking) {
+    if (activeTab === 'clustering' && activeClusteringTab && ttsEngineRef.current && ttsEnabled) {
+      // Petit délai pour laisser le composant se monter
       const timer = setTimeout(() => {
         const clusteringExplanation = getActiveClusteringExplanation();
         if (clusteringExplanation && clusteringExplanation.tts_text) {
           ttsEngineRef.current.speak(clusteringExplanation.tts_text);
+        } else if (clusteringExplanation && clusteringExplanation.summary) {
+          ttsEngineRef.current.speak(clusteringExplanation.summary + " " + clusteringExplanation.recommendation);
         }
-      }, 800);
+      }, 500);
       
       return () => {
         clearTimeout(timer);
+        if (ttsEngineRef.current) {
+          ttsEngineRef.current.stop();
+        }
       };
     }
-  }, [activeTab, activeClusteringTab, ttsEnabled, isSpeaking]);
+  }, [activeTab, activeClusteringTab, ttsEnabled]);
 
   // Protection critique
   if (!data || (!data.summary_stats && !data.metrics)) {
@@ -1086,7 +1085,6 @@ const AnalysisResults = ({ data }) => {
                       <h3 className="text-lg font-bold text-purple-900">Segmentation Intelligente</h3>
                       <p className="text-xs text-purple-700">
                         Analyse de clustering {eda.multi_clustering?.n_clustering_types || 0} modèles
-                        {eda.multi_clustering?.total_points && ` • ${eda.multi_clustering.total_points.toLocaleString()} points`}
                       </p>
                     </div>
                   </div>
@@ -1188,9 +1186,9 @@ const AnalysisResults = ({ data }) => {
                     <div className="h-px bg-purple-100"></div>
                     <div className="text-center">
                       <p className="text-lg font-bold text-gray-800">
-                        {activeClusteringTab && eda.multi_clustering?.clusterings[activeClusteringTab]?.total_points?.toLocaleString() || '0'}
+                        {activeClusteringTab && eda.multi_clustering?.clusterings[activeClusteringTab]?.n_clusters || 0}
                       </p>
-                      <p className="text-[10px] text-gray-600 font-bold">Points visibles</p>
+                      <p className="text-[10px] text-gray-600 font-bold">Groupes actifs</p>
                     </div>
                   </div>
                 </div>
@@ -1220,9 +1218,6 @@ const AnalysisResults = ({ data }) => {
                           {clust.silhouette_score.toFixed(2)}
                         </span>
                       )}
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-50 text-green-600 border border-green-200">
-                        {clust.total_points?.toLocaleString() || '0'} pts
-                      </span>
                     </button>
                   ))}
                 </div>
@@ -1236,9 +1231,6 @@ const AnalysisResults = ({ data }) => {
                         scatterPoints={eda.multi_clustering.clusterings[activeClusteringTab].scatter_points || []}
                         dna={eda.multi_clustering.clusterings[activeClusteringTab].dna || {}}
                         colors={CLUSTER_COLORS}
-                        silhouetteScore={eda.multi_clustering.clusterings[activeClusteringTab].silhouette_score}
-                        methodUsed={eda.multi_clustering.clusterings[activeClusteringTab].method_used}
-                        quality3D={eda.multi_clustering.clusterings[activeClusteringTab].quality_3d}
                       />
                     </div>
 
@@ -1265,52 +1257,127 @@ const AnalysisResults = ({ data }) => {
                                   />
                                   <h5 className="text-xs font-bold text-gray-900 flex-1">Groupe {i+1}</h5>
                                   <span className="text-[10px] bg-white px-2 py-0.5 rounded-full border border-gray-300 text-gray-700">
-                                    {dist.percentage}% • {dist.count.toLocaleString()} pts
+                                    {dist.percentage}% • {dist.count} pts
                                   </span>
                                 </div>
                                 
+                                {/* 🔧 MODIFICATION: Meilleure gestion des caractéristiques vides */}
                                 {clusterData && clusterData.features && Object.keys(clusterData.features).length > 0 ? (
                                   <div className="space-y-1.5 text-[10px]">
                                     <p className="font-semibold text-gray-700">Caractéristiques distinctives :</p>
                                     {Object.entries(clusterData.features)
                                       .slice(0, 3)
-                                      .map(([feat, info]) => (
-                                        <div key={feat} className="bg-white p-2 rounded border border-gray-100">
-                                          <div className="flex justify-between items-center">
-                                            <span className="font-bold text-gray-800 truncate">{feat}</span>
-                                            <span className={`text-[9px] px-1.5 py-0.5 rounded ${
-                                              info.direction.includes('↑')
-                                                ? 'bg-green-100 text-green-800'
-                                                : 'bg-red-100 text-red-800'
-                                            }`}>
-                                              {info.z_score > 0 ? '+' : ''}{info.z_score}
-                                            </span>
+                                      .map(([feat, info]) => {
+                                        // Déterminer la couleur en fonction du z-score
+                                        let bgColor = 'bg-gray-100';
+                                        let textColor = 'text-gray-600';
+                                        let borderColor = 'border-gray-200';
+                                        
+                                        if (info.z_score > 0.5) {
+                                          bgColor = 'bg-green-100';
+                                          textColor = 'text-green-800';
+                                          borderColor = 'border-green-200';
+                                        } else if (info.z_score > 0.1) {
+                                          bgColor = 'bg-green-50';
+                                          textColor = 'text-green-700';
+                                          borderColor = 'border-green-100';
+                                        } else if (info.z_score < -0.5) {
+                                          bgColor = 'bg-red-100';
+                                          textColor = 'text-red-800';
+                                          borderColor = 'border-red-200';
+                                        } else if (info.z_score < -0.1) {
+                                          bgColor = 'bg-red-50';
+                                          textColor = 'text-red-700';
+                                          borderColor = 'border-red-100';
+                                        }
+                                        
+                                        return (
+                                          <div key={feat} className={`bg-white p-2 rounded border ${borderColor}`}>
+                                            <div className="flex justify-between items-center">
+                                              <span className="font-bold text-gray-800 truncate" title={feat}>
+                                                {feat.length > 20 ? `${feat.substring(0, 20)}...` : feat}
+                                              </span>
+                                              <span className={`text-[9px] px-1.5 py-0.5 rounded ${bgColor} ${textColor}`}>
+                                                {info.z_score > 0 ? '+' : ''}{info.z_score.toFixed(1)}
+                                              </span>
+                                            </div>
+                                            <p className="text-gray-600 mt-0.5 text-[9px]">
+                                              {info.interpretation}
+                                            </p>
+                                            <div className="mt-1 text-[8px] text-gray-500">
+                                              Valeur: {info.value} | Importance: {info.importance}
+                                            </div>
                                           </div>
-                                          <p className="text-gray-600 mt-0.5">{info.interpretation}</p>
-                                        </div>
-                                      ))}
+                                        );
+                                      })}
                                   </div>
                                 ) : (
-                                  <p className="text-xs text-gray-500 italic text-center py-2">
-                                    Caractéristiques en cours d'analyse...
-                                  </p>
+                                  <div className="space-y-1.5 text-[10px]">
+                                    <p className="font-semibold text-gray-700">Caractéristiques :</p>
+                                    <div className="bg-yellow-50 p-3 rounded border border-yellow-100">
+                                      <div className="flex items-start gap-2">
+                                        <AlertTriangle className="w-3 h-3 text-yellow-600 mt-0.5 flex-shrink-0" />
+                                        <div>
+                                          <p className="text-yellow-700 font-semibold text-[10px]">Analyse limitée</p>
+                                          <p className="text-yellow-600 text-[9px] mt-1">
+                                            Ce groupe présente des caractéristiques similaires à la moyenne globale.
+                                            {clusterData?.size && clusterData.size < 10 && 
+                                              ` Peu d'échantillons (${clusterData.size}) pour une analyse détaillée.`}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    
+                                    {/* 🔧 AFFICHAGE DES VALEURS BRUTES COMME FALLBACK */}
+                                    {clusterData && (
+                                      <div className="mt-2 pt-2 border-t border-gray-200">
+                                        <p className="text-[10px] text-gray-600 mb-1">Valeurs moyennes du groupe :</p>
+                                        <div className="flex flex-wrap gap-1">
+                                          {Object.entries(eda.multi_clustering?.variables_used || {}).slice(0, 3).map(([varName]) => (
+                                            <span key={varName} className="text-[8px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                                              {varName.substring(0, 12)}...
+                                            </span>
+                                          ))}
+                                          {Object.keys(eda.multi_clustering?.variables_used || {}).length > 3 && (
+                                            <span className="text-[8px] text-gray-500">+{Object.keys(eda.multi_clustering?.variables_used || {}).length - 3} autres</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
                                 )}
                                 
-                                {clusterData?.distinctiveness && (
+                                {/* Indicateur de distinctivité */}
+                                {clusterData?.distinctiveness !== undefined && (
                                   <div className="mt-2 pt-2 border-t border-gray-200">
                                     <div className="flex justify-between text-[9px]">
                                       <span className="text-gray-600">Distinctivité :</span>
-                                      <span className="font-bold text-blue-600">
+                                      <span className={`font-bold ${
+                                        clusterData.distinctiveness > 0.5 ? 'text-green-600' : 
+                                        clusterData.distinctiveness > 0.3 ? 'text-yellow-600' : 'text-gray-500'
+                                      }`}>
                                         {clusterData.distinctiveness > 0.5 ? 'Élevée' : 
-                                         clusterData.distinctiveness > 0.3 ? 'Moyenne' : 'Faible'}
+                                        clusterData.distinctiveness > 0.3 ? 'Moyenne' : 'Faible'}
                                       </span>
                                     </div>
                                     <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
                                       <div 
-                                        className="bg-blue-500 h-1.5 rounded-full"
+                                        className={`h-1.5 rounded-full ${
+                                          clusterData.distinctiveness > 0.5 ? 'bg-green-500' :
+                                          clusterData.distinctiveness > 0.3 ? 'bg-yellow-500' :
+                                          'bg-gray-400'
+                                        }`}
                                         style={{ width: `${Math.min(clusterData.distinctiveness * 100, 100)}%` }}
                                       ></div>
                                     </div>
+                                    <p className="text-[8px] text-gray-500 mt-1">
+                                      {clusterData.distinctiveness > 0.5 ? 
+                                        'Groupe très distinct des autres' :
+                                        clusterData.distinctiveness > 0.3 ?
+                                        'Groupe moyennement distinct' :
+                                        'Groupe peu distinct - similaire aux autres'
+                                      }
+                                    </p>
                                   </div>
                                 )}
                               </div>
@@ -1356,18 +1423,71 @@ const AnalysisResults = ({ data }) => {
                               </p>
                             </div>
                             
-                            {/* Informations sur les points */}
-                            <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-                              <div className="flex items-center gap-2 mb-1">
-                                <Info className="w-3 h-3 text-blue-600" />
-                                <span className="text-xs font-bold text-blue-800">Points 3D</span>
+                            {/* 🔧 Ajout d'un indicateur de qualité des caractéristiques */}
+                            <div>
+                              <div className="flex justify-between text-xs mb-1">
+                                <span className="text-gray-600">Caractéristiques définies</span>
+                                <span className="font-bold text-blue-600">
+                                  {(() => {
+                                    const clusters = eda.multi_clustering.clusterings[activeClusteringTab];
+                                    let definedFeatures = 0;
+                                    let totalClusters = 0;
+                                    
+                                    if (clusters.dna) {
+                                      Object.values(clusters.dna).forEach(cluster => {
+                                        if (cluster.features && Object.keys(cluster.features).length > 0) {
+                                          definedFeatures++;
+                                        }
+                                        totalClusters++;
+                                      });
+                                    }
+                                    
+                                    return `${definedFeatures}/${totalClusters}`;
+                                  })()}
+                                </span>
                               </div>
-                              <p className="text-[10px] text-blue-700">
-                                Tous les {eda.multi_clustering.clusterings[activeClusteringTab].total_points?.toLocaleString() || '0'} points sont visibles en 3D.
-                                {eda.multi_clustering.clusterings[activeClusteringTab].total_points > 5000 && 
-                                  ' Utilisation du mode optimisé pour grands ensembles.'}
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div 
+                                  className="h-2 rounded-full bg-blue-500"
+                                  style={{ 
+                                    width: `${(() => {
+                                      const clusters = eda.multi_clustering.clusterings[activeClusteringTab];
+                                      let definedFeatures = 0;
+                                      let totalClusters = 0;
+                                      
+                                      if (clusters.dna) {
+                                        Object.values(clusters.dna).forEach(cluster => {
+                                          if (cluster.features && Object.keys(cluster.features).length > 0) {
+                                            definedFeatures++;
+                                          }
+                                          totalClusters++;
+                                        });
+                                      }
+                                      
+                                      return totalClusters > 0 ? (definedFeatures / totalClusters) * 100 : 0;
+                                    })()}%` 
+                                  }}
+                                ></div>
+                              </div>
+                              <p className="text-[10px] text-gray-500 mt-1">
+                                Pourcentage de groupes avec caractéristiques distinctives
                               </p>
                             </div>
+                            
+                            {/* Variance expliquée */}
+                            {eda.multi_clustering.clusterings[activeClusteringTab].explained_variance && (
+                              <div>
+                                <p className="text-xs text-gray-600 mb-1">Variance expliquée (PCA)</p>
+                                <div className="flex gap-1">
+                                  {eda.multi_clustering.clusterings[activeClusteringTab].explained_variance.map((v, idx) => (
+                                    <div key={idx} className="flex-1 bg-blue-50 p-2 rounded text-center">
+                                      <p className="text-[10px] font-bold text-blue-800">PC{idx+1}</p>
+                                      <p className="text-xs font-bold text-gray-900">{v}%</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
