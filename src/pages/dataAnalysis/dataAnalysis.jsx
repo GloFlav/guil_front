@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
   Upload, Zap, BarChart3, Loader, AlertTriangle, AlertCircle, CheckCircle,
   Database, ChevronDown, ChevronUp, ChevronsDown, ChevronsUp, LayoutList,
-  Search, X, Sparkles, Volume2, VolumeX, Eye, Download
+  Search, X, Sparkles, Volume2, VolumeX, Eye, Download, ArrowRight, Brain,
+  Play, Pause, RotateCcw, FileText, FileDown, Printer
 } from 'lucide-react';
 import DataUploadSection from '@/components/dataAnalysisComponents/DataUploadSection';
 import AnalysisLoader from '@/components/dataAnalysisComponents/AnalysisLoader';
@@ -11,6 +12,11 @@ import ExportSidebar from '@/components/dataAnalysisComponents/ExportSidebar';
 import Swal from 'sweetalert2';
 import withReactContent from 'sweetalert2-react-content';
 import analysisService from '@/services/analysisService';
+import { 
+  ContinueAnalysisButton, 
+  SmartAnalysisResultsPanel, 
+  SmartAnalysisProgress 
+} from '@/components/dataAnalysisComponents/SmartAnalysisPanel';
 
 const MySwal = withReactContent(Swal);
 const GREEN_COLOR = '#5DA781';
@@ -94,7 +100,294 @@ const useTTSEngine = () => {
     });
   };
 
-  return { speakNonBlocking, isTtsEnabled, setIsTtsEnabled, isSpeaking };
+  const stopSpeaking = () => {
+    window.speechSynthesis.cancel();
+    isSpeakingRef.current = false;
+    setIsSpeaking(false);
+  };
+
+  return { speakNonBlocking, stopSpeaking, isTtsEnabled, setIsTtsEnabled, isSpeaking };
+};
+
+// ============================================================================
+// 📄 EXPORT PDF BUTTON COMPONENT - CORRIGÉ
+// ============================================================================
+const ExportPDFButton = ({ fileId, userPrompt, disabled, onExportStart, onExportComplete }) => {
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+
+  const handleExportPDF = async () => {
+    if (!fileId || isExporting) return;
+
+    setIsExporting(true);
+    setExportProgress(10);
+    
+    if (onExportStart) onExportStart();
+
+    try {
+      // Simuler progression pendant la génération
+      const progressInterval = setInterval(() => {
+        setExportProgress(prev => Math.min(prev + 10, 80));
+      }, 500);
+
+      const result = await analysisService.exportSmartAnalysisPDF(fileId, userPrompt);
+
+      clearInterval(progressInterval);
+      setExportProgress(100);
+
+      if (result.success && result.download_url) {
+        // CORRECTION: Téléchargement direct via lien
+        const downloadUrl = result.download_url;
+        const absoluteUrl = downloadUrl.startsWith('http') 
+          ? downloadUrl 
+          : `${window.location.origin}${downloadUrl}`;
+        
+        // Créer un lien invisible et déclencher le téléchargement
+        const link = document.createElement('a');
+        link.href = absoluteUrl;
+        link.download = result.report_name || `Rapport_Analyse_${Date.now()}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Optionnel: Ouvrir aussi dans un nouvel onglet
+        window.open(absoluteUrl, '_blank');
+
+        MySwal.fire({
+          icon: 'success',
+          title: 'Rapport PDF Genere !',
+          html: `
+            <div class="text-left">
+              <p class="text-gray-700 mb-2"><strong>${result.report_name}</strong></p>
+              <p class="text-sm text-gray-500">Taille: ${(result.file_size / 1024).toFixed(1)} KB</p>
+              <p class="text-sm text-gray-500">Pages estimees: ${result.pages_estimated || '3-5'}</p>
+            </div>
+          `,
+          confirmButtonColor: GREEN_COLOR,
+          confirmButtonText: 'Parfait !',
+          timer: 5000
+        });
+
+        if (onExportComplete) onExportComplete(result);
+      } else if (result.success && result.report_path) {
+        // Fallback: Si download_url n'est pas fourni, mais report_path existe
+        // On peut appeler une API pour récupérer le fichier
+        try {
+          const response = await fetch(`/api/v1/exports/${result.report_name}`);
+          if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = result.report_name || `Rapport_Analyse_${Date.now()}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+          }
+        } catch (error) {
+          console.error('Erreur telechargement:', error);
+          MySwal.fire({
+            icon: 'warning',
+            title: 'Telechargement en arriere-plan',
+            text: 'Le PDF est disponible dans vos telechargements.',
+            timer: 3000
+          });
+        }
+      } else {
+        throw new Error(result.error || 'Erreur inconnue');
+      }
+    } catch (error) {
+      console.error('Erreur export PDF:', error);
+      
+      MySwal.fire({
+        icon: 'error',
+        title: 'Erreur Export PDF',
+        html: `
+          <div class="text-left">
+            <p class="mb-2">Impossible de generer le rapport PDF.</p>
+            <p class="text-sm text-red-600">${error.message}</p>
+          </div>
+        `,
+        confirmButtonColor: '#d33'
+      });
+    } finally {
+      setIsExporting(false);
+      setExportProgress(0);
+    }
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={handleExportPDF}
+        disabled={disabled || isExporting}
+        className={`
+          flex items-center gap-3 px-6 py-3 rounded-xl font-bold text-sm 
+          transition-all duration-300 shadow-lg hover:shadow-xl
+          ${isExporting 
+            ? 'bg-gray-100 text-gray-400 cursor-wait' 
+            : 'bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 hover:-translate-y-0.5'
+          }
+          disabled:opacity-50 disabled:cursor-not-allowed
+        `}
+      >
+        {isExporting ? (
+          <>
+            <Loader className="w-5 h-5 animate-spin" />
+            <span>Generation en cours...</span>
+            <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">
+              {exportProgress}%
+            </span>
+          </>
+        ) : (
+          <>
+            <FileDown className="w-5 h-5" />
+            <span>Exporter Rapport PDF</span>
+            <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">
+              Multi-IA
+            </span>
+          </>
+        )}
+      </button>
+
+      {/* Progress bar */}
+      {isExporting && (
+        <div className="absolute -bottom-2 left-0 right-0 h-1 bg-gray-200 rounded-full overflow-hidden">
+          <div 
+            className="h-full bg-gradient-to-r from-red-400 to-red-600 transition-all duration-300"
+            style={{ width: `${exportProgress}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============================================================================
+// 📊 EXPORT ACTIONS PANEL - Panneau complet d'export
+// ============================================================================
+const ExportActionsPanel = ({ fileId, userPrompt, smartResults, isVisible }) => {
+  const [showDetails, setShowDetails] = useState(false);
+
+  if (!isVisible || !smartResults) return null;
+
+  return (
+    <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-2xl border border-slate-200 shadow-lg p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl shadow-lg">
+            <FileText className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">Rapport Professionnel</h3>
+            <p className="text-sm text-gray-500">
+              Export PDF avec analyse multi-LLM
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+        >
+          {showDetails ? 'Masquer' : 'Details'}
+          {showDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+      </div>
+
+      {/* Details du rapport */}
+      {showDetails && (
+        <div className="mb-6 p-4 bg-white rounded-xl border border-gray-200 animate-in fade-in duration-300">
+          <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-500" />
+            Contenu du Rapport (3-5 pages)
+          </h4>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+            <div className="flex items-start gap-2 p-2 bg-blue-50 rounded-lg">
+              <div className="w-2 h-2 bg-blue-500 rounded-full mt-1.5"></div>
+              <div>
+                <span className="font-medium text-blue-800">OpenAI GPT-4</span>
+                <p className="text-blue-600 text-xs">Titre contextuel + Strategie</p>
+              </div>
+            </div>
+            
+            <div className="flex items-start gap-2 p-2 bg-purple-50 rounded-lg">
+              <div className="w-2 h-2 bg-purple-500 rounded-full mt-1.5"></div>
+              <div>
+                <span className="font-medium text-purple-800">Anthropic Claude</span>
+                <p className="text-purple-600 text-xs">Decisions sociales Madagascar</p>
+              </div>
+            </div>
+            
+            <div className="flex items-start gap-2 p-2 bg-green-50 rounded-lg">
+              <div className="w-2 h-2 bg-green-500 rounded-full mt-1.5"></div>
+              <div>
+                <span className="font-medium text-green-800">Google Gemini</span>
+                <p className="text-green-600 text-xs">Vulgarisation + Geographie</p>
+              </div>
+            </div>
+            
+            <div className="flex items-start gap-2 p-2 bg-amber-50 rounded-lg">
+              <div className="w-2 h-2 bg-amber-500 rounded-full mt-1.5"></div>
+              <div>
+                <span className="font-medium text-amber-800">Graphiques EDA</span>
+                <p className="text-amber-600 text-xs">Distributions, Clusters, Charts</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-100">
+            <h5 className="font-medium text-gray-700 mb-2 text-xs uppercase tracking-wider">
+              Structure du Rapport
+            </h5>
+            <ol className="text-xs text-gray-600 space-y-1">
+              <li className="flex items-center gap-2">
+                <span className="w-5 h-5 bg-slate-200 rounded-full flex items-center justify-center text-[10px] font-bold">1</span>
+                Resume Executif & Metriques
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-5 h-5 bg-slate-200 rounded-full flex items-center justify-center text-[10px] font-bold">2</span>
+                Vulgarisation Grand Public
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-5 h-5 bg-slate-200 rounded-full flex items-center justify-center text-[10px] font-bold">3</span>
+                Analyse Technique (EDA + ML)
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-5 h-5 bg-slate-200 rounded-full flex items-center justify-center text-[10px] font-bold">4</span>
+                Visualisations & Graphiques
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-5 h-5 bg-slate-200 rounded-full flex items-center justify-center text-[10px] font-bold">5</span>
+                Strategie & Recommandations
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-5 h-5 bg-red-200 rounded-full flex items-center justify-center text-[10px] font-bold text-red-700">6</span>
+                <span className="text-red-700 font-medium">Decision Sociale & Action</span>
+              </li>
+            </ol>
+          </div>
+        </div>
+      )}
+
+      {/* Bouton d'export principal */}
+      <div className="flex flex-col sm:flex-row items-center gap-4">
+        <ExportPDFButton 
+          fileId={fileId}
+          userPrompt={userPrompt}
+          disabled={!smartResults}
+        />
+
+        <div className="text-xs text-gray-500 text-center sm:text-left">
+          <p>Rapport genere avec 3 IA specialisees</p>
+          <p>Inclut decisions sociales pour Madagascar</p>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // ============================================================================
@@ -135,7 +428,7 @@ const FilteredDataViewer = ({ filteredData, fileStats }) => {
         <div className="flex items-center gap-3">
           <Eye className="w-5 h-5 text-blue-600" />
           <div>
-            <h3 className="font-bold text-gray-900">Données Filtrées</h3>
+            <h3 className="font-bold text-gray-900">Donnees Filtrees</h3>
             <p className="text-xs text-gray-500 mt-0.5">
               {fileStats.total_rows} lignes × {fileStats.total_columns} colonnes
             </p>
@@ -193,7 +486,7 @@ const FilteredDataViewer = ({ filteredData, fileStats }) => {
 
           <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-100 rounded-lg">
             <span className="text-xs text-blue-700 font-medium">
-              {filteredData.length > 20 ? `Affichage: 20 premières lignes sur ${filteredData.length}` : `${filteredData.length} lignes`}
+              {filteredData.length > 20 ? `Affichage: 20 premieres lignes sur ${filteredData.length}` : `${filteredData.length} lignes`}
             </span>
             
             <button
@@ -261,7 +554,7 @@ const FileStatsCard = ({ stats }) => {
               <span>{stats.file_size_kb} KB</span>
               <span className="w-0.5 h-0.5 bg-gray-300 rounded-full"></span>
               <span className="px-1.5 py-0.5 bg-green-50 text-green-700 border border-green-100 rounded text-[9px] font-bold uppercase tracking-wider">
-                Scan Réussi
+                Scan Reussi
               </span>
             </div>
           </div>
@@ -279,7 +572,7 @@ const FileStatsCard = ({ stats }) => {
           ) : (
             <>
               <ChevronsDown className="w-3 h-3" />
-              Déplier
+              Deplier
             </>
           )}
         </button>
@@ -345,7 +638,7 @@ const FileStatsCard = ({ stats }) => {
                   </div>
                   <div className="text-left">
                     <h4 className="font-bold text-amber-900 text-xs">
-                      {partialCount} incomplète{partialCount > 1 ? 's' : ''}
+                      {partialCount} incomplete{partialCount > 1 ? 's' : ''}
                     </h4>
                   </div>
                 </div>
@@ -382,8 +675,8 @@ const FileStatsCard = ({ stats }) => {
             <div className="bg-green-50 border border-green-200 p-3 rounded-lg flex items-center gap-2 text-green-800">
               <CheckCircle className="w-4 h-4 text-green-600" />
               <div>
-                <h4 className="font-bold text-xs">Qualité Parfaite</h4>
-                <p className="text-[10px] text-green-700">100% complété.</p>
+                <h4 className="font-bold text-xs">Qualite Parfaite</h4>
+                <p className="text-[10px] text-green-700">100% complete.</p>
               </div>
             </div>
           )}
@@ -456,7 +749,7 @@ const FileStatsCard = ({ stats }) => {
 };
 
 // ============================================================================
-// 🎤 EXPLICATION TAB - Affichée après upload avec TTS auto + boutons
+// 🎤 EXPLICATION TAB - Affichee apres upload avec TTS auto + boutons
 // ============================================================================
 const ExplanationTab = ({ 
   fileStats, 
@@ -478,23 +771,16 @@ const ExplanationTab = ({
     setIsComplete(false);
 
     try {
-      const response = await fetch('/api/v1/analyze/file-structure-tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_id: fileStats.file_id })
-      });
+      const response = await analysisService.getFileStructureExplanation(fileStats.file_id);
 
-      if (!response.ok) throw new Error('API error');
-      
-      const data = await response.json();
-      setExplanation(data.ai_summary || "");
-      ttsDataRef.current = data.tts_text;
+      setExplanation(response.ai_summary || "");
+      ttsDataRef.current = response.tts_text;
 
-      // 🎤 TTS AUTOMATIQUE au chargement
-      if (isTtsEnabled && data.tts_text) {
+      // TTS AUTOMATIQUE au chargement
+      if (isTtsEnabled && response.tts_text) {
         ttsLaunchedRef.current = true;
         setIsSpeaking(true);
-        speakNonBlocking(data.tts_text).then(() => {
+        speakNonBlocking(response.tts_text).then(() => {
           setIsSpeaking(false);
         }).catch(err => {
           console.error("TTS error:", err);
@@ -542,7 +828,7 @@ const ExplanationTab = ({
     <div className="w-full bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <h3 className="text-lg font-semibold text-gray-800">📖 Explication du Dataset</h3>
+          <h3 className="text-lg font-semibold text-gray-800">Explication du Dataset</h3>
           {isComplete && <CheckCircle className="w-5 h-5 text-green-600" />}
         </div>
 
@@ -554,10 +840,10 @@ const ExplanationTab = ({
                 ? 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-50'
                 : 'bg-green-100 text-green-700 border border-green-300 hover:bg-green-50'
             }`}
-            title={isSpeaking ? "Arrêter la lecture" : "Écouter l'explication"}
+            title={isSpeaking ? "Arreter la lecture" : "Ecouter l'explication"}
           >
             <Volume2 className="w-4 h-4" />
-            {isSpeaking ? "Arrêter" : "🔊 Écouter"}
+            {isSpeaking ? "Arreter" : "Ecouter"}
           </button>
         )}
       </div>
@@ -575,13 +861,13 @@ const ExplanationTab = ({
             </p>
           </div>
         ) : (
-          <p className="text-gray-400 italic text-sm">En attente des données...</p>
+          <p className="text-gray-400 italic text-sm">En attente des donnees...</p>
         )}
       </div>
 
       {isSpeaking && (
         <div className="mt-4 text-center text-xs text-green-600 font-medium p-2 bg-green-50 rounded border border-green-100 animate-pulse">
-          🔊 Lecture en cours...
+          Lecture en cours...
         </div>
       )}
     </div>
@@ -663,7 +949,7 @@ const EDATabsWithExplanations = ({
                 }`}
               >
                 <Volume2 className="w-4 h-4" />
-                {isSpeakingTab === activeTab ? "Arrêter résumé" : "🔊 Écouter résumé"}
+                {isSpeakingTab === activeTab ? "Arreter resume" : "Ecouter resume"}
               </button>
 
               <button
@@ -675,7 +961,7 @@ const EDATabsWithExplanations = ({
                 }`}
               >
                 <Volume2 className="w-4 h-4" />
-                {isSpeakingTab === `${activeTab}-rec` ? "Arrêter recom." : "📢 Lire recommandations"}
+                {isSpeakingTab === `${activeTab}-rec` ? "Arreter recom." : "Lire recommandations"}
               </button>
             </div>
           )}
@@ -683,7 +969,7 @@ const EDATabsWithExplanations = ({
           {/* Textes */}
           <div className="space-y-4">
             <div>
-              <h4 className="font-bold text-gray-900 mb-2 text-sm">Résumé</h4>
+              <h4 className="font-bold text-gray-900 mb-2 text-sm">Resume</h4>
               <p className="text-gray-700 leading-relaxed text-sm whitespace-pre-wrap bg-gray-50 p-3 rounded-lg border border-gray-200">
                 {activeTabData.summary}
               </p>
@@ -717,7 +1003,24 @@ const DataAnalysis = () => {
   const [analysisResults, setAnalysisResults] = useState(null);
   const [loadingSteps, setLoadingSteps] = useState([]);
 
-  const { speakNonBlocking, isTtsEnabled, setIsTtsEnabled } = useTTSEngine();
+  // SMART ANALYTICS STATES
+  const [showSmartAnalysis, setShowSmartAnalysis] = useState(false);
+  const [isSmartAnalyzing, setIsSmartAnalyzing] = useState(false);
+  const [smartProgress, setSmartProgress] = useState(0);
+  const [smartProgressMessage, setSmartProgressMessage] = useState('');
+  const [smartResults, setSmartResults] = useState(null);
+  const wsRef = useRef(null);
+
+  const { speakNonBlocking, stopSpeaking, isTtsEnabled, setIsTtsEnabled, isSpeaking } = useTTSEngine();
+
+  // Cleanup WebSocket on unmount
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
 
   const handleFileUpload = async (file) => {
     const validExtensions = ['.xls', '.xlsx', '.csv', '.tsv', '.ods'];
@@ -727,7 +1030,7 @@ const DataAnalysis = () => {
       MySwal.fire({ 
         icon: 'error', 
         title: 'Format invalide', 
-        text: 'Seuls Excel et CSV sont supportés.' 
+        text: 'Seuls Excel et CSV sont supportes.' 
       });
       return;
     }
@@ -736,7 +1039,7 @@ const DataAnalysis = () => {
       MySwal.fire({ 
         icon: 'error', 
         title: 'Fichier lourd', 
-        text: 'Limite de 50 Mo dépassée.' 
+        text: 'Limite de 50 Mo depassee.' 
       });
       return;
     }
@@ -747,6 +1050,8 @@ const DataAnalysis = () => {
     setFilteredData(null);
     setExplanationComplete(false);
     setAnalysisResults(null);
+    setShowSmartAnalysis(false);
+    setSmartResults(null);
 
     if (isTtsEnabled) {
       const text = `Je vais analyser le fichier ${file.name}`;
@@ -766,12 +1071,12 @@ const DataAnalysis = () => {
         const cols = response.total_columns;
         const partialCount = response.partially_empty_columns?.length || 0;
         
-        const filteringText = `Je viens de filtrer le fichier. Maintenant on a ${rows} lignes et ${cols} colonnes valides. ${partialCount} partiellement incomplètes conservées.`;
+        const filteringText = `Je viens de filtrer le fichier. Maintenant on a ${rows} lignes et ${cols} colonnes valides. ${partialCount} partiellement incompletes conservees.`;
         speakNonBlocking(filteringText, 'NORMAL').catch(err => console.error("TTS error:", err));
       }
 
     } catch (error) {
-      console.error("❌ Erreur Scan:", error);
+      console.error("Erreur Scan:", error);
       
       const errorMessage = error.response?.data?.detail 
         || error.message 
@@ -797,6 +1102,16 @@ const DataAnalysis = () => {
     setIsAnalyzing(false);
     setLoadingSteps([]);
     setAnalysisResults(null);
+    setShowSmartAnalysis(false);
+    setIsSmartAnalyzing(false);
+    setSmartProgress(0);
+    setSmartProgressMessage('');
+    setSmartResults(null);
+    
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
   };
 
   const handleExplanationComplete = (transcription) => {
@@ -812,7 +1127,7 @@ const DataAnalysis = () => {
       MySwal.fire({ 
         icon: 'warning', 
         title: 'Description manquante', 
-        text: 'Veuillez décrire votre objectif.' 
+        text: 'Veuillez decrire votre objectif.' 
       });
       return;
     }
@@ -820,6 +1135,7 @@ const DataAnalysis = () => {
     setIsAnalyzing(true);
     setLoadingSteps([]);
     setAnalysisResults(null);
+    setShowSmartAnalysis(false);
 
     try {
         const fileId = fileStats.file_id;
@@ -827,34 +1143,36 @@ const DataAnalysis = () => {
 
         const analysisPromise = analysisService.analyzeFileFull(fileId, userPrompt);
 
-        setLoadingSteps((prev) => [...prev, { step: 1, message: '🧠 Inférence du contexte par l\'IA...' }]);
+        setLoadingSteps((prev) => [...prev, { step: 1, message: 'Inference du contexte par l\'IA...' }]);
         
         await new Promise(resolve => setTimeout(resolve, 3000));
-        setLoadingSteps((prev) => [...prev, { step: 2, message: '⚙️ Feature Engineering...' }]);
+        setLoadingSteps((prev) => [...prev, { step: 2, message: 'Feature Engineering...' }]);
         
         await new Promise(resolve => setTimeout(resolve, 1500));
-        setLoadingSteps((prev) => [...prev, { step: 3, message: '🧼 Correction des incohérences...' }]);
+        setLoadingSteps((prev) => [...prev, { step: 3, message: 'Correction des incoherences...' }]);
 
         await new Promise(resolve => setTimeout(resolve, 1500));
-        setLoadingSteps((prev) => [...prev, { step: 4, message: '📊 Analyse Exploratoire...' }]);
+        setLoadingSteps((prev) => [...prev, { step: 4, message: 'Analyse Exploratoire...' }]);
 
         const response = await analysisPromise;
 
         setAnalysisResults(response);
+        setShowSmartAnalysis(true); // Afficher le bouton Continuer
 
         MySwal.fire({ 
           icon: 'success', 
-          title: 'Analyse terminée !', 
-          timer: 1500, 
+          title: 'Analyse EDA terminee !', 
+          text: 'Vous pouvez maintenant continuer avec l\'analyse avancee.',
+          timer: 2500, 
           showConfirmButton: false 
         });
 
     } catch (error) {
-        console.error("❌ Erreur Analyse Complète:", error);
+        console.error("Erreur Analyse Complete:", error);
         
         const errorMessage = error.response?.data?.detail 
           || error.message 
-          || "Erreur critique dans le pipeline de données/IA.";
+          || "Erreur critique dans le pipeline de donnees/IA.";
         
         MySwal.fire({
             icon: 'error',
@@ -863,7 +1181,131 @@ const DataAnalysis = () => {
         });
     } finally {
         setIsAnalyzing(false);
-        setLoadingSteps((prev) => [...prev, { step: 5, message: 'Pipeline terminé.' }]);
+        setLoadingSteps((prev) => [...prev, { step: 5, message: 'Pipeline EDA termine.' }]);
+    }
+  };
+
+  // SMART ANALYTICS - Lancement via WebSocket
+  const handleStartSmartAnalysis = () => {
+    if (!fileStats?.file_id || isSmartAnalyzing) return;
+
+    setIsSmartAnalyzing(true);
+    setSmartProgress(0);
+    setSmartProgressMessage('Connexion au serveur...');
+    setSmartResults(null);
+
+    if (isTtsEnabled) {
+      speakNonBlocking("Lancement de l'analyse avancee avec Machine Learning.", 'CRITICAL');
+    }
+
+    // Creer la connexion WebSocket
+    wsRef.current = analysisService.startSmartAnalysisWithProgress(
+      fileStats.file_id,
+      description,
+      {
+        onProgress: (message, percentage) => {
+          setSmartProgress(percentage);
+          setSmartProgressMessage(message);
+        },
+        onPhaseComplete: (phase, data) => {
+          console.log(`Phase ${phase} terminee:`, data);
+        },
+        onComplete: (data) => {
+          console.log('Analyse Smart terminee:', data);
+          
+          // Recuperer les resultats complets
+          analysisService.getSmartAnalysisResults(fileStats.file_id)
+            .then(results => {
+              setSmartResults(results.data || results);
+              setIsSmartAnalyzing(false);
+              setSmartProgress(100);
+              setSmartProgressMessage('Analyse terminee !');
+
+              if (isTtsEnabled) {
+                speakNonBlocking("L'analyse avancee est terminee. Consultez les resultats du Machine Learning et les recommandations.");
+              }
+
+              MySwal.fire({
+                icon: 'success',
+                title: 'Analyse Avancee Terminee !',
+                text: `${data.phases_completed?.length || 8} phases completees`,
+                timer: 2500,
+                showConfirmButton: false
+              });
+            })
+            .catch(err => {
+              console.error('Erreur recuperation resultats:', err);
+              setIsSmartAnalyzing(false);
+            });
+        },
+        onError: (errorMessage) => {
+          console.error('Erreur Smart Analysis:', errorMessage);
+          setIsSmartAnalyzing(false);
+          setSmartProgressMessage(`Erreur: ${errorMessage}`);
+          
+          MySwal.fire({
+            icon: 'error',
+            title: 'Erreur Analyse Avancee',
+            text: errorMessage
+          });
+        },
+        onClose: () => {
+          console.log('WebSocket ferme');
+        }
+      }
+    );
+  };
+
+  // Fallback: Lancement via API REST (si WebSocket non disponible)
+  const handleStartSmartAnalysisREST = async () => {
+    if (!fileStats?.file_id || isSmartAnalyzing) return;
+
+    setIsSmartAnalyzing(true);
+    setSmartProgress(10);
+    setSmartProgressMessage('Lancement de l\'analyse...');
+
+    try {
+      // Simuler la progression
+      const progressInterval = setInterval(() => {
+        setSmartProgress(prev => Math.min(prev + 5, 90));
+      }, 2000);
+
+      const result = await analysisService.runSmartAnalysisComplete(
+        fileStats.file_id,
+        description
+      );
+
+      clearInterval(progressInterval);
+
+      if (result.success) {
+        setSmartResults(result.data || result);
+        setSmartProgress(100);
+        setSmartProgressMessage('Analyse terminee !');
+
+        if (isTtsEnabled) {
+          speakNonBlocking("L'analyse avancee est terminee.");
+        }
+
+        MySwal.fire({
+          icon: 'success',
+          title: 'Analyse Avancee Terminee !',
+          timer: 2000,
+          showConfirmButton: false
+        });
+      } else {
+        throw new Error(result.error || 'Erreur inconnue');
+      }
+    } catch (error) {
+      console.error('Erreur Smart Analysis REST:', error);
+      setSmartProgressMessage(`Erreur: ${error.message}`);
+      
+      MySwal.fire({
+        icon: 'error',
+        title: 'Erreur',
+        text: error.message
+      });
+    } finally {
+      setIsSmartAnalyzing(false);
     }
   };
 
@@ -879,10 +1321,10 @@ const DataAnalysis = () => {
                 <div className="p-2 rounded-lg shadow-sm bg-white border border-gray-100">
                   <BarChart3 className="w-5 h-5" style={{ color: GREEN_COLOR }} />
                 </div>
-                <h1 className="text-xl font-bold text-gray-900 tracking-tight">Analyse de Données IA</h1>
+                <h1 className="text-xl font-bold text-gray-900 tracking-tight">Analyse de Donnees IA</h1>
               </div>
               <p className="text-xs text-gray-500 ml-11 max-w-xl">
-                Importez vos fichiers bruts. L'IA scanne la structure, visualise les données, puis analyse en profondeur.
+                Importez vos fichiers bruts. L'IA scanne la structure, visualise les donnees, puis analyse en profondeur.
               </p>
             </div>
 
@@ -893,17 +1335,17 @@ const DataAnalysis = () => {
                   ? 'bg-green-100 text-green-700 border border-green-300 hover:bg-green-50' 
                   : 'bg-gray-100 text-gray-500 border border-gray-300 hover:bg-gray-50'
               }`}
-              title="Activer/Désactiver la synthèse vocale"
+              title="Activer/Desactiver la synthese vocale"
             >
               {isTtsEnabled ? (
                 <>
                   <Volume2 className="w-4 h-4" />
-                  Voix Activée
+                  Voix Activee
                 </>
               ) : (
                 <>
                   <VolumeX className="w-4 h-4" />
-                  Voix Désactivée
+                  Voix Desactivee
                 </>
               )}
             </button>
@@ -914,14 +1356,14 @@ const DataAnalysis = () => {
               onFileUpload={handleFileUpload}
               uploadedFile={uploadedFile}
               onClear={handleClearAll}
-              disabled={isAnalyzing || isUploading}
+              disabled={isAnalyzing || isUploading || isSmartAnalyzing}
             />
 
             {isUploading && (
               <div className="flex flex-col items-center justify-center p-8 bg-white rounded-xl border border-dashed border-gray-300 animate-pulse">
                 <Loader className="w-8 h-8 text-green-600 animate-spin mb-3" />
                 <p className="font-medium text-gray-700 text-sm">Scan du fichier en cours...</p>
-                <p className="text-xs text-gray-400">Analyse de la structure et de la qualité des données</p>
+                <p className="text-xs text-gray-400">Analyse de la structure et de la qualite des donnees</p>
               </div>
             )}
 
@@ -930,7 +1372,7 @@ const DataAnalysis = () => {
                 <FileStatsCard stats={fileStats} />
                 <FilteredDataViewer filteredData={filteredData} fileStats={fileStats} />
 
-                {/* 🎤 ONGLET EXPLICATION - Nouveau ! */}
+                {/* ONGLET EXPLICATION */}
                 {!explanationComplete && (
                   <ExplanationTab
                     fileStats={fileStats}
@@ -952,7 +1394,7 @@ const DataAnalysis = () => {
                     </div>
                     <div>
                       <h3 className="font-bold text-gray-900">Votre Objectif</h3>
-                      <p className="text-xs text-gray-500 mt-0.5">Modifiez si nécessaire avant de lancer l'analyse</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Modifiez si necessaire avant de lancer l'analyse</p>
                     </div>
                   </div>
                 </div>
@@ -963,7 +1405,7 @@ const DataAnalysis = () => {
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
                       disabled={isAnalyzing}
-                      placeholder="Décrivez votre objectif d'analyse..."
+                      placeholder="Decrivez votre objectif d'analyse..."
                       className="w-full px-4 py-3 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all resize-none disabled:opacity-50 disabled:cursor-not-allowed"
                       rows={3}
                     />
@@ -982,42 +1424,44 @@ const DataAnalysis = () => {
             )}
           </div>
 
-          {/* BOUTONS */}
-          <div className="flex flex-wrap gap-3 pt-3 border-t border-gray-200">
-            <button
-              onClick={handleAnalyze}
-              disabled={!uploadedFile || !fileStats || !explanationComplete || isAnalyzing || isUploading}
-              className={`flex items-center gap-2 px-6 py-2.5 text-white rounded-lg font-bold text-xs uppercase tracking-wide transition-all shadow hover:shadow-md hover:-translate-y-0.5
-                ${(!uploadedFile || !fileStats || !explanationComplete) ? 'bg-gray-300 cursor-not-allowed shadow-none' : ''}`}
-              style={{ backgroundColor: (!uploadedFile || !fileStats || !explanationComplete) ? undefined : GREEN_COLOR }}
-            >
-              {isAnalyzing ? (
-                <>
-                  <Loader className="w-4 h-4 animate-spin" />
-                  Traitement IA...
-                </>
-              ) : (
-                <>
-                  <Zap className="w-4 h-4" />
-                  Lancer l'Analyse
-                </>
-              )}
-            </button>
-
-            {uploadedFile && (
+          {/* BOUTONS - Phase 1: Lancer EDA */}
+          {!analysisResults && (
+            <div className="flex flex-wrap gap-3 pt-3 border-t border-gray-200">
               <button
-                onClick={handleClearAll}
-                disabled={isAnalyzing}
-                className="px-5 py-2.5 border border-gray-300 text-gray-600 rounded-lg font-bold text-xs uppercase tracking-wide hover:bg-white hover:text-red-500 hover:border-red-200 transition-colors"
+                onClick={handleAnalyze}
+                disabled={!uploadedFile || !fileStats || !explanationComplete || isAnalyzing || isUploading}
+                className={`flex items-center gap-2 px-6 py-2.5 text-white rounded-lg font-bold text-xs uppercase tracking-wide transition-all shadow hover:shadow-md hover:-translate-y-0.5
+                  ${(!uploadedFile || !fileStats || !explanationComplete) ? 'bg-gray-300 cursor-not-allowed shadow-none' : ''}`}
+                style={{ backgroundColor: (!uploadedFile || !fileStats || !explanationComplete) ? undefined : GREEN_COLOR }}
               >
-                Tout effacer
+                {isAnalyzing ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" />
+                    Traitement IA...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4" />
+                    Lancer l'Analyse EDA
+                  </>
+                )}
               </button>
-            )}
-          </div>
+
+              {uploadedFile && (
+                <button
+                  onClick={handleClearAll}
+                  disabled={isAnalyzing}
+                  className="px-5 py-2.5 border border-gray-300 text-gray-600 rounded-lg font-bold text-xs uppercase tracking-wide hover:bg-white hover:text-red-500 hover:border-red-200 transition-colors"
+                >
+                  Tout effacer
+                </button>
+              )}
+            </div>
+          )}
 
           {isAnalyzing && <AnalysisLoader steps={loadingSteps} />}
 
-          {/* 📊 ONGLETS EDA AVEC EXPLICATIONS - Nouveau ! */}
+          {/* 📊 RESULTATS EDA */}
           {analysisResults && !isAnalyzing && (
             <>
               <EDATabsWithExplanations
@@ -1026,13 +1470,62 @@ const DataAnalysis = () => {
                 speakNonBlocking={speakNonBlocking}
               />
               <AnalysisResults data={analysisResults} />
+
+              {/* 🚀 BOUTON CONTINUER - Apres EDA, avant Smart Results */}
+              {showSmartAnalysis && !smartResults && !isSmartAnalyzing && (
+                <ContinueAnalysisButton
+                  onContinue={handleStartSmartAnalysis}
+                  disabled={isSmartAnalyzing}
+                  isLoading={isSmartAnalyzing}
+                />
+              )}
+
+              {/* 🔄 PROGRESSION Smart Analysis */}
+              <SmartAnalysisProgress
+                progress={smartProgress}
+                message={smartProgressMessage}
+                isVisible={isSmartAnalyzing}
+              />
+
+              {/* 🎯 RESULTATS Smart Analysis */}
+              {smartResults && (
+                <>
+                  <SmartAnalysisResultsPanel 
+                    smartResults={smartResults}
+                    isTtsEnabled={isTtsEnabled}
+                  />
+
+                  {/* 📄 PANNEAU EXPORT PDF - NOUVEAU */}
+                  <ExportActionsPanel
+                    fileId={fileStats?.file_id}
+                    userPrompt={description}
+                    smartResults={smartResults}
+                    isVisible={!!smartResults}
+                  />
+                </>
+              )}
+
+              {/* Bouton Effacer en bas */}
+              <div className="flex justify-end pt-4 border-t border-gray-200">
+                <button
+                  onClick={handleClearAll}
+                  disabled={isSmartAnalyzing}
+                  className="px-5 py-2.5 border border-gray-300 text-gray-600 rounded-lg font-bold text-xs uppercase tracking-wide hover:bg-white hover:text-red-500 hover:border-red-200 transition-colors"
+                >
+                  Nouvelle Analyse
+                </button>
+              </div>
             </>
           )}
         </div>
       </div>
-      
-      {(analysisResults || fileStats) && !isAnalyzing && (
-        <ExportSidebar data={analysisResults || fileStats} />
+
+      {/* Sidebar Export (si resultats) */}
+      {analysisResults && !isAnalyzing && (
+        <ExportSidebar 
+          data={analysisResults} 
+          isLocked={isSmartAnalyzing}
+        />
       )}
     </div>
   );
