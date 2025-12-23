@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schéma du Paysage Multi-LLM RAG</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f4f9;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .diagram-container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            width: 90%;
+            max-width: 1200px;
+        }
+        .legend {
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #666;
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+        }
+        .legend span {
+            display: inline-block;
+            margin-right: 15px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Paysage Architectural Multi-LLM RAG</h1>
+
+    <div class="diagram-container">
+        <div class="mermaid">
+            %% Configuration du graphique
+            graph TD
+                %% Définition des styles
+                classDef user fill:#f9f,stroke:#333,stroke-width:2px,color:black;
+                classDef data fill:#eee,stroke:#333,stroke-width:1px,stroke-dasharray: 5 5,color:black;
+                classDef db fill:#d4e1f5,stroke:#333,stroke-width:2px,color:black;
+                
+                %% Styles spécifiques pour les différents rôles de LLM
+                classDef llm_router fill:#ffcccb,stroke:#d32f2f,stroke-width:3px,color:black,font-weight:bold;
+                classDef llm_expert fill:#c8e6c9,stroke:#388e3c,stroke-width:3px,color:black,font-weight:bold;
+                classDef llm_synth fill:#fff59d,stroke:#fbc02d,stroke-width:3px,color:black,font-weight:bold;
+
+                %% --- Début du Flux ---
+                User([👤 Utilisateur]):::user --> Query[❓ Requête Initiale]
+
+                subgraph "PHASE 1 : Orchestration & Compréhension (LLM 1)"
+                    Query --> RouterLLM{{⚙️ LLM 1 : Orchestrateur & Reformulateur}}:::llm_router
+                    RouterLLM -- "Analyse l'intention et reformule" --> RefinedQuery[Requête Optimisée]
+                end
+                
+                subgraph "PHASE 2 : Retrieval (Recherche)"
+                    RefinedQuery --> EmbedModel[🧮 Modèle d'Embedding]
+                    EmbedModel --> VectorSearch[🔍 Recherche Vectorielle]
+                    
+                    KnBase[(📚 Base de Connaissances / Vector DB)]:::db -.-> VectorSearch
+                    
+                    VectorSearch --> RawDocs[📄 Documents Bruts Récupérés]:::data
+                    RawDocs --> Reranker[⚖️ Système de Reranking / Filtrage]
+                    Reranker --> Context[📃 Contexte Pertinent Final]:::data
+                end
+
+                subgraph "PHASE 3 : Génération Multi-Experts (LLMs 2, 3, 4...)"
+                    RouterLLM -.-> |"Décision de Routage (ex: 'C'est juridique')"| RoutingDecision((Aiguillage))
+                    
+                    RoutingDecision -- "Si Domaine A" --> ExpertA
+                    RoutingDecision -- "Si Domaine B" --> ExpertB
+                    RoutingDecision -- "Si Général" --> ExpertGen
+                    
+                    Context --> ExpertA[⚖️ LLM 2 : Expert Juridique]:::llm_expert
+                    Context --> ExpertB[💻 LLM 3 : Expert Technique/Code]:::llm_expert
+                    Context --> ExpertGen[🧠 LLM 4 : Modèle Généraliste]:::llm_expert
+                end
+
+                subgraph "PHASE 4 : Synthèse & Validation (LLM Final)"
+                    ExpertA --> Drafts[Brouillons de Réponses]:::data
+                    ExpertB --> Drafts
+                    ExpertGen --> Drafts
+                    
+                    Drafts --> SynthLLM{{📝 LLM 5 : Synthétiseur & Vérificateur de faits}}:::llm_synth
+                    SynthLLM -- "Combine, nettoie et vérifie les sources" --> FinalAnswer[✅ Réponse Finale]
+                end
+
+                FinalAnswer --> User
+
+                %% Liens explicatifs
+                KnBase ~~~ Context
+        </div>
+
+        <div class="legend">
+            <p><strong>Légende :</strong></p>
+            <p>
+                <span style="color:#d32f2f;">■ LLM Orchestrateur</span> : Dirige le trafic et comprend la requête.
+                <span style="color:#388e3c;">■ LLM Expert</span> : Modèle spécialisé dans un domaine précis.
+                <span style="color:#fbc02d;">■ LLM Synthétiseur</span> : Vérifie et assemble la réponse finale.
+                <span style="color:#333;">■ Composants RAG Classiques</span> : Base de données, Embedding, Reranker.
+            </p>
+        </div>
+    </div>
+
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'base',
+            flowchart: {
+                curve: 'basis',
+                padding: 20
+            }
+        });
+    </script>
+
+</body>
+</html>
